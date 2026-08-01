@@ -191,3 +191,101 @@ def send_employer_custom_email_task(self, physician_user_id: int, employer_name:
     except Exception as exc:
         logger.warning('send_employer_custom_email failed: %s', exc)
         raise self.retry(exc=exc)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ADMIN NOTIFICATION TASKS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _get_admin_emails():
+    from django.contrib.auth import get_user_model
+    return list(get_user_model().objects.filter(is_staff=True).values_list('email', flat=True))
+
+
+# ── A1. New user signup ───────────────────────────────────────────────────────
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60, name='emails.admin_new_user')
+def send_admin_new_user_email_task(self, user_id: int):
+    try:
+        from emails import service
+        user = _get_user(user_id)
+        full_name = getattr(user, 'full_name', '') or f'{getattr(user, "first_name", "")} {getattr(user, "last_name", "")}'.strip()
+        for admin_email in _get_admin_emails():
+            if admin_email:
+                service.send_admin_new_user_email(admin_email, user.email, getattr(user, 'user_type', ''), full_name)
+    except Exception as exc:
+        logger.warning('send_admin_new_user_email failed: %s', exc)
+        raise self.retry(exc=exc)
+
+
+# ── A2. New job post submitted ────────────────────────────────────────────────
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60, name='emails.admin_new_job')
+def send_admin_new_job_email_task(self, job_id: int):
+    try:
+        from emails import service
+        from jobs.models import Job
+        job = Job.objects.select_related('employer__user').get(pk=job_id)
+        employer_name = getattr(job.employer, 'company_name', '') or ''
+        employer_email = job.employer.user.email if job.employer else ''
+        for admin_email in _get_admin_emails():
+            if admin_email:
+                service.send_admin_new_job_email(admin_email, job.title, employer_name, employer_email, job.province or '')
+    except Exception as exc:
+        logger.warning('send_admin_new_job_email failed: %s', exc)
+        raise self.retry(exc=exc)
+
+
+# ── A3. Payment received ──────────────────────────────────────────────────────
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60, name='emails.admin_payment_received')
+def send_admin_payment_received_email_task(self, user_id: int, plan_name: str, amount: str):
+    try:
+        from emails import service
+        user = _get_user(user_id)
+        employer_name = ''
+        try:
+            employer_name = user.employer_profile.company_name or ''
+        except Exception:
+            pass
+        for admin_email in _get_admin_emails():
+            if admin_email:
+                service.send_admin_payment_email(admin_email, user.email, employer_name, plan_name, amount)
+    except Exception as exc:
+        logger.warning('send_admin_payment_received_email failed: %s', exc)
+        raise self.retry(exc=exc)
+
+
+# ── A4. Payment failed ────────────────────────────────────────────────────────
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60, name='emails.admin_payment_failed')
+def send_admin_payment_failed_email_task(self, user_id: int, plan_name: str):
+    try:
+        from emails import service
+        user = _get_user(user_id)
+        for admin_email in _get_admin_emails():
+            if admin_email:
+                service.send_admin_payment_failed_email(admin_email, user.email, plan_name)
+    except Exception as exc:
+        logger.warning('send_admin_payment_failed_email failed: %s', exc)
+        raise self.retry(exc=exc)
+
+
+# ── A5. Subscription cancelled ────────────────────────────────────────────────
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=60, name='emails.admin_subscription_cancelled')
+def send_admin_subscription_cancelled_email_task(self, user_id: int, plan_name: str):
+    try:
+        from emails import service
+        user = _get_user(user_id)
+        employer_name = ''
+        try:
+            employer_name = user.employer_profile.company_name or ''
+        except Exception:
+            pass
+        for admin_email in _get_admin_emails():
+            if admin_email:
+                service.send_admin_subscription_cancelled_email(admin_email, user.email, employer_name, plan_name)
+    except Exception as exc:
+        logger.warning('send_admin_subscription_cancelled_email failed: %s', exc)
+        raise self.retry(exc=exc)

@@ -102,6 +102,8 @@ class JobListCreateView(generics.ListCreateAPIView):
             serializer = self.get_serializer(data=request.data, context={'request': request})
             serializer.is_valid(raise_exception=True)
             job = serializer.save()
+        from emails.tasks import send_admin_new_job_email_task
+        send_admin_new_job_email_task.delay(job.pk)
         return success_response(
             data=JobDetailSerializer(job).data,
             message='Job posting created. It will be visible after admin approval.',

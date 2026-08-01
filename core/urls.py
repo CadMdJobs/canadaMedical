@@ -8,7 +8,7 @@ from core.health import health_check
 # ── Admin URL hardening ───────────────────────────────────────────────────────
 # The admin path is read from settings so it can be changed per-environment
 # without a code change. Set DJANGO_ADMIN_URL in production .env.
-ADMIN_URL = getattr(settings, 'DJANGO_ADMIN_URL', 'admin')
+ADMIN_URL = getattr(settings, 'DJANGO_ADMIN_URL', 'admin').rstrip('/')
 
 urlpatterns = [
     # Lightweight health probe — used by Docker, load balancers, and uptime monitors

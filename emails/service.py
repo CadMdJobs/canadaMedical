@@ -584,3 +584,166 @@ def send_custom_plan_payment_link_email(employer_user, payment_link: str, price:
         'Your CandianMdJobs Custom Plan Payment Link',
         _base_html('Custom Plan Payment', body),
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ADMIN NOTIFICATION EMAILS
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── A1. New user signup ───────────────────────────────────────────────────────
+
+def send_admin_new_user_email(admin_email: str, user_email: str, user_type: str, full_name: str) -> bool:
+    role_badge = 'Physician' if user_type == 'physician' else 'Employer'
+    role_color = '#1d4ed8' if user_type == 'physician' else '#7e22ce'
+
+    body = f"""
+<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">New User Registration 👤</h2>
+<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">A new account has been created on the platform.</p>
+
+<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:20px;">
+  <table style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#6b7280;width:120px;">Name</td>
+      <td style="padding:6px 0;font-size:13px;color:#111827;font-weight:600;">{full_name or '—'}</td>
+    </tr>
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Email</td>
+      <td style="padding:6px 0;font-size:13px;color:#111827;font-weight:600;">{user_email}</td>
+    </tr>
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Role</td>
+      <td style="padding:6px 0;">
+        <span style="background:{role_color};color:#fff;font-size:11px;font-weight:700;padding:2px 10px;border-radius:99px;">{role_badge}</span>
+      </td>
+    </tr>
+  </table>
+</div>
+
+{_btn('View in Admin Dashboard', getattr(__import__('django.conf', fromlist=['settings']).settings, 'FRONTEND_URL', '') + '/admin/users')}
+"""
+    return _send(admin_email, f'New {role_badge} Registration — {user_email}', _base_html('New User Registration', body))
+
+
+# ── A2. New job post submitted (pending review) ───────────────────────────────
+
+def send_admin_new_job_email(admin_email: str, job_title: str, employer_name: str, employer_email: str, province: str) -> bool:
+    from django.conf import settings
+    frontend_url = getattr(settings, 'FRONTEND_URL', '')
+
+    body = f"""
+<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">New Job Post Pending Review 📋</h2>
+<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">A new job posting has been submitted and requires your approval.</p>
+
+<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:20px;margin-bottom:20px;">
+  <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#b45309;text-transform:uppercase;">Pending Approval</p>
+  <p style="margin:0;font-size:16px;font-weight:700;color:#111827;">{job_title}</p>
+  <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">{employer_name} · {province}</p>
+  <p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">{employer_email}</p>
+</div>
+
+{_btn('Review & Approve Job', f'{frontend_url}/admin/jobs')}
+{_divider()}
+<p style="margin:0;color:#9ca3af;font-size:13px;">Log in to the admin dashboard to approve or reject this posting.</p>
+"""
+    return _send(admin_email, f'New Job Post Pending Review — {job_title}', _base_html('New Job Post', body))
+
+
+# ── A3. Payment received ──────────────────────────────────────────────────────
+
+def send_admin_payment_email(admin_email: str, employer_email: str, employer_name: str, plan_name: str, amount: str) -> bool:
+    from django.conf import settings
+    frontend_url = getattr(settings, 'FRONTEND_URL', '')
+
+    body = f"""
+<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Payment Received 💳</h2>
+<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">A new subscription payment has been processed.</p>
+
+<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px;margin-bottom:20px;">
+  <table style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#6b7280;width:120px;">Employer</td>
+      <td style="padding:6px 0;font-size:13px;color:#111827;font-weight:600;">{employer_name}</td>
+    </tr>
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Email</td>
+      <td style="padding:6px 0;font-size:13px;color:#111827;">{employer_email}</td>
+    </tr>
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Plan</td>
+      <td style="padding:6px 0;font-size:13px;color:#111827;font-weight:600;">{plan_name}</td>
+    </tr>
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Amount</td>
+      <td style="padding:6px 0;font-size:16px;font-weight:800;color:#15803d;">{amount} CAD</td>
+    </tr>
+  </table>
+</div>
+
+{_btn('View Payment History', f'{frontend_url}/admin/payments')}
+"""
+    return _send(admin_email, f'Payment Received — {plan_name} ({amount} CAD)', _base_html('Payment Received', body))
+
+
+# ── A4. Stripe payment failed ─────────────────────────────────────────────────
+
+def send_admin_payment_failed_email(admin_email: str, employer_email: str, plan_name: str) -> bool:
+    from django.conf import settings
+    frontend_url = getattr(settings, 'FRONTEND_URL', '')
+
+    body = f"""
+<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">⚠️ Payment Failed</h2>
+<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">A subscription payment has failed and the account is now past due.</p>
+
+<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:20px;margin-bottom:20px;">
+  <table style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#6b7280;width:120px;">Employer</td>
+      <td style="padding:6px 0;font-size:13px;color:#111827;font-weight:600;">{employer_email}</td>
+    </tr>
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Plan</td>
+      <td style="padding:6px 0;font-size:13px;color:#111827;font-weight:600;">{plan_name}</td>
+    </tr>
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Status</td>
+      <td style="padding:6px 0;"><span style="color:#dc2626;font-weight:700;">Past Due</span></td>
+    </tr>
+  </table>
+</div>
+
+<p style="margin:0 0 20px;color:#374151;font-size:14px;">The account has been marked as past due. Stripe will retry automatically. No action needed unless the issue persists.</p>
+{_btn('View in Stripe Dashboard', 'https://dashboard.stripe.com/payments')}
+"""
+    return _send(admin_email, f'⚠️ Payment Failed — {employer_email}', _base_html('Payment Failed', body))
+
+
+# ── A5. Subscription cancelled ────────────────────────────────────────────────
+
+def send_admin_subscription_cancelled_email(admin_email: str, employer_email: str, employer_name: str, plan_name: str) -> bool:
+    from django.conf import settings
+    frontend_url = getattr(settings, 'FRONTEND_URL', '')
+
+    body = f"""
+<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Subscription Cancelled</h2>
+<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">An employer has cancelled their subscription.</p>
+
+<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:20px;margin-bottom:20px;">
+  <table style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#6b7280;width:120px;">Employer</td>
+      <td style="padding:6px 0;font-size:13px;color:#111827;font-weight:600;">{employer_name}</td>
+    </tr>
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Email</td>
+      <td style="padding:6px 0;font-size:13px;color:#111827;">{employer_email}</td>
+    </tr>
+    <tr>
+      <td style="padding:6px 0;font-size:13px;color:#6b7280;">Plan</td>
+      <td style="padding:6px 0;font-size:13px;color:#111827;font-weight:600;">{plan_name}</td>
+    </tr>
+  </table>
+</div>
+
+{_btn('View Subscriptions', f'{frontend_url}/admin/subscriptions')}
+"""
+    return _send(admin_email, f'Subscription Cancelled — {employer_name}', _base_html('Subscription Cancelled', body))

@@ -8,17 +8,15 @@ from django.db import transaction
 from django.utils.http import urlsafe_base64_decode
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from core.validators import validate_resume_file, validate_image_file  # centralised validators
 from .models import PhysicianProfile, EmployerProfile
 
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
-ALLOWED_RESUME_EXTENSIONS = ['pdf', 'doc', 'docx']
-MAX_RESUME_SIZE = 5 * 1024 * 1024
 
-
-def validate_password_strength(password):
+def validate_password_strength(password: str) -> str:
     if len(password) < 8:
         raise serializers.ValidationError('Password must be at least 8 characters.')
     if not re.search(r'[A-Za-z]', password):
@@ -32,35 +30,13 @@ def validate_password_strength(password):
     return password
 
 
-def validate_phone(phone):
+def validate_phone(phone: str) -> str:
     cleaned = re.sub(r'[\s\-\(\)\+]', '', phone)
     if phone and not cleaned.isdigit():
         raise serializers.ValidationError('Enter a valid phone number.')
     if phone and not (7 <= len(cleaned) <= 15):
         raise serializers.ValidationError('Phone number must be between 7 and 15 digits.')
-    return cleaned  # store normalised digits; empty string passes through unchanged
-
-
-RESUME_MAGIC_BYTES = {
-    b'%PDF',                          # PDF
-    b'\xd0\xcf\x11\xe0',             # DOC (OLE2)
-    b'PK\x03\x04',                   # DOCX (ZIP-based)
-}
-
-
-def validate_resume_file(file):
-    ext = file.name.rsplit('.', 1)[-1].lower() if '.' in file.name else ''
-    if ext not in ALLOWED_RESUME_EXTENSIONS:
-        raise serializers.ValidationError(
-            f'Only {", ".join(ALLOWED_RESUME_EXTENSIONS).upper()} files are allowed.'
-        )
-    if file.size > MAX_RESUME_SIZE:
-        raise serializers.ValidationError('Resume file size must not exceed 5 MB.')
-    header = file.read(4)
-    file.seek(0)
-    if not any(header.startswith(magic) for magic in RESUME_MAGIC_BYTES):
-        raise serializers.ValidationError('File content does not match the declared file type.')
-    return file
+    return cleaned
 
 
 # ── Custom JWT ────────────────────────────────────────────────────────────────
@@ -315,6 +291,11 @@ class PhysicianProfileUpdateSerializer(serializers.ModelSerializer):
             'work_eligibility',
         ]
 
+    def validate_avatar(self, value):
+        if value:
+            return validate_image_file(value)
+        return value
+
     def validate_linkedin_url(self, value):
         if not value:
             return value
@@ -392,6 +373,11 @@ class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
             'website', 'logo',
         ]
 
+    def validate_logo(self, value):
+        if value:
+            return validate_image_file(value)
+        return value
+
     def validate_website(self, value):
         if not value:
             return value
@@ -403,7 +389,8 @@ class EmployerProfileUpdateSerializer(serializers.ModelSerializer):
         user_data = validated_data.pop('user', {})
         for attr, value in user_data.items():
             setattr(instance.user, attr, value)
-        instance.user.save(update_fields=list(user_data.keys()))
+        if user_data:
+            instance.user.save(update_fields=list(user_data.keys()))
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)

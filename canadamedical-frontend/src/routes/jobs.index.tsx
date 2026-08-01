@@ -2,9 +2,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Search, MapPin, Briefcase, Building2, SlidersHorizontal, ArrowRight,
-  X, Clock, Stethoscope, BadgeCheck, LayoutGrid, List,
-  ChevronDown, Check, DollarSign,
+  Search, MapPin, Briefcase, Building2, SlidersHorizontal,
+  ArrowRight, X, Clock, Stethoscope, BadgeCheck, LayoutGrid, List,
+  ChevronDown, Check, DollarSign, Bookmark, BookmarkCheck,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -38,135 +38,151 @@ function formatSalary(amount: number): string {
 function getSalaryLine(job: Job): string | null {
   if (job.salary_display) return job.salary_display;
   if (job.salary_min != null && job.salary_max != null)
-    return `$${formatSalary(job.salary_min)} – $${formatSalary(job.salary_max)}/yr`;
-  if (job.salary_min != null) return `From $${formatSalary(job.salary_min)}/yr`;
-  if (job.salary_max != null) return `Up to $${formatSalary(job.salary_max)}/yr`;
+    return `$${formatSalary(job.salary_min)} – $${formatSalary(job.salary_max)} / yr`;
+  if (job.salary_min != null) return `From $${formatSalary(job.salary_min)} / yr`;
+  if (job.salary_max != null) return `Up to $${formatSalary(job.salary_max)} / yr`;
   return null;
 }
 
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const days = Math.floor(diff / 86400000);
-  if (days === 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days < 7) return `${days}d ago`;
-  if (days < 30) return `${Math.floor(days / 7)}w ago`;
-  return `${Math.floor(days / 30)}mo ago`;
+  if (days === 0) return "Posted today";
+  if (days === 1) return "Posted yesterday";
+  if (days < 7) return `Posted ${days} days ago`;
+  if (days < 30) return `Posted ${Math.floor(days / 7)} week${Math.floor(days / 7) > 1 ? "s" : ""} ago`;
+  return `Posted ${Math.floor(days / 30)} month${Math.floor(days / 30) > 1 ? "s" : ""} ago`;
 }
 
 function JobCardSkeleton() {
   return (
-    <div className="animate-pulse rounded-2xl border border-slate-100 bg-white p-5">
+    <div className="animate-pulse border-b border-slate-100 px-6 py-5 last:border-0">
       <div className="flex gap-4">
-        <div className="h-12 w-12 rounded-xl bg-slate-100 shrink-0" />
-        <div className="flex-1 space-y-3">
-          <div className="h-4 w-32 rounded-full bg-slate-100" />
-          <div className="h-5 w-56 rounded bg-slate-100" />
-          <div className="flex gap-3">
-            <div className="h-3 w-28 rounded bg-slate-100" />
-            <div className="h-3 w-20 rounded bg-slate-100" />
+        <div className="h-14 w-14 rounded-xl bg-slate-100 shrink-0" />
+        <div className="flex-1 space-y-2.5">
+          <div className="h-5 w-48 rounded bg-slate-100" />
+          <div className="h-3.5 w-32 rounded bg-slate-100" />
+          <div className="h-3.5 w-40 rounded bg-slate-100" />
+          <div className="flex gap-2 pt-1">
+            <div className="h-6 w-24 rounded-full bg-slate-100" />
+            <div className="h-6 w-20 rounded-full bg-slate-100" />
           </div>
         </div>
-        <div className="h-8 w-24 rounded-lg bg-slate-100 shrink-0" />
+        <div className="hidden sm:flex flex-col items-end gap-2">
+          <div className="h-5 w-32 rounded bg-slate-100" />
+          <div className="h-8 w-8 rounded-full bg-slate-100" />
+        </div>
       </div>
     </div>
   );
 }
 
-function JobCard({ job, view }: { job: Job; view: "list" | "grid" }) {
+function JobCard({ job }: { job: Job }) {
   const salaryLine = getSalaryLine(job);
-  const initials = job.employer_name.split(" ").map((w) => w[0]).slice(0, 2).join("");
-
-  if (view === "grid") {
-    return (
-      <article className="group flex flex-col rounded-2xl border border-slate-100 bg-white p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[#1a6fd4]/20 hover:shadow-lg">
-        {job.is_featured && (
-          <span className="mb-3 inline-flex w-fit items-center gap-1 rounded-full bg-amber-50 border border-amber-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-600">
-            <BadgeCheck className="h-3 w-3" /> Featured
-          </span>
-        )}
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#0f1f3d] text-xs font-extrabold text-white shadow-sm">
-            {initials || "?"}
-          </div>
-          <div className="min-w-0 flex-1">
-            <span className="inline-flex items-center gap-1 rounded-md bg-[#1a6fd4]/8 px-2 py-0.5 text-[11px] font-semibold text-[#1a6fd4]">
-              <Stethoscope className="h-3 w-3" /> {job.specialty_display || job.specialty}
-            </span>
-            <h3 className="mt-1.5 text-sm font-bold text-[#0f1f3d] group-hover:text-[#1a6fd4] transition-colors line-clamp-2">{job.title}</h3>
-          </div>
-        </div>
-        <div className="mt-3 space-y-1.5 text-xs text-slate-400">
-          <span className="flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5 text-slate-300" /> {job.employer_name}</span>
-          <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-slate-300" /> {job.location_display}</span>
-          <span className="flex items-center gap-1.5"><Briefcase className="h-3.5 w-3.5 text-slate-300" /> {job.job_type_display || job.job_type}</span>
-          {salaryLine && (
-            <span className="flex items-center gap-1.5 font-semibold text-emerald-600">
-              <DollarSign className="h-3.5 w-3.5" /> {salaryLine}
-            </span>
-          )}
-        </div>
-        {job.summary && <p className="mt-2 text-xs text-slate-400 line-clamp-2">{job.summary}</p>}
-        <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-4">
-          <span className="flex items-center gap-1 text-[11px] text-slate-300">
-            <Clock className="h-3 w-3" /> {timeAgo(job.created_at)}
-          </span>
-          <Link to="/jobs/$jobId" params={{ jobId: String(job.id) }}
-            className="inline-flex items-center gap-1 rounded-lg bg-[#1a6fd4] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#1560be]">
-            View <ArrowRight className="h-3 w-3" />
-          </Link>
-        </div>
-      </article>
-    );
-  }
+  const initials = job.employer_name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
   return (
-    <article className="group rounded-2xl border border-slate-100 bg-white px-5 py-4 transition-all duration-200 hover:border-[#1a6fd4]/20 hover:shadow-md">
-      <div className="flex items-center gap-4">
-        {/* Employer initials */}
-        <div className="hidden sm:flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#0f1f3d] text-sm font-extrabold text-white shadow-sm">
+    <article className="group border-b border-slate-100 px-6 py-5 last:border-0 transition hover:bg-slate-50/60">
+      <div className="flex items-start gap-4">
+        {/* Employer logo/initials */}
+        <div className="hidden sm:flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#0f1f3d] text-sm font-extrabold text-white shadow-sm">
           {initials || "?"}
         </div>
+
+        {/* Main content */}
         <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-md bg-[#1a6fd4]/8 px-2 py-0.5 text-[11px] font-semibold text-[#1a6fd4]">
-              <Stethoscope className="h-3 w-3" /> {job.specialty_display || job.specialty}
-            </span>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <Link to="/jobs/$jobId" params={{ jobId: String(job.id) }}
+                className="text-base font-bold text-[#0f1f3d] hover:text-[#1a6fd4] transition-colors line-clamp-1">
+                {job.title}
+              </Link>
+              <p className="mt-0.5 text-sm text-slate-500">{job.employer_name}</p>
+              <div className="mt-1 flex items-center gap-1 text-sm text-slate-400">
+                <MapPin className="h-3.5 w-3.5 shrink-0" />
+                <span>{job.location_display}</span>
+              </div>
+            </div>
+            {/* Salary + bookmark — right side */}
+            <div className="hidden sm:flex shrink-0 flex-col items-end gap-2">
+              {salaryLine && (
+                <span className="text-sm font-bold text-emerald-600 whitespace-nowrap">{salaryLine}</span>
+              )}
+              <button className="rounded-full p-1.5 text-slate-300 transition hover:bg-slate-100 hover:text-slate-500">
+                <Bookmark className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Tags row */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {(job.job_type_display || job.job_type) && (
+              <span className="inline-flex items-center rounded-full border border-[#1a6fd4]/20 bg-[#f0f4ff] px-2.5 py-0.5 text-xs font-semibold text-[#1a6fd4]">
+                {job.job_type_display || job.job_type}
+              </span>
+            )}
+            {(job.specialty_display || job.specialty) && (
+              <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-500">
+                {job.specialty_display || job.specialty}
+              </span>
+            )}
             {job.is_featured && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-600">
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-600">
                 <BadgeCheck className="h-3 w-3" /> Featured
               </span>
             )}
-            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
-              {job.job_type_display || job.job_type}
-            </span>
-            <span className="ml-auto text-[11px] text-slate-300 sm:hidden">
-              {timeAgo(job.created_at)}
-            </span>
-          </div>
-          <h3 className="mt-1.5 text-sm font-bold text-[#0f1f3d] group-hover:text-[#1a6fd4] transition-colors">{job.title}</h3>
-          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
-            <span className="flex items-center gap-1"><Building2 className="h-3.5 w-3.5 text-slate-300" /> {job.employer_name}</span>
-            <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5 text-slate-300" /> {job.location_display}</span>
-            {salaryLine && (
-              <span className="flex items-center gap-1 font-semibold text-emerald-600">
-                <DollarSign className="h-3.5 w-3.5" /> {salaryLine}
-              </span>
-            )}
+            <span className="ml-auto text-xs text-slate-400">{timeAgo(job.created_at)}</span>
           </div>
         </div>
-        <div className="hidden shrink-0 flex-col items-end gap-2 sm:flex">
-          <span className="flex items-center gap-1 text-[11px] text-slate-300">
-            <Clock className="h-3 w-3" /> {timeAgo(job.created_at)}
-          </span>
+      </div>
+    </article>
+  );
+}
+
+function GridJobCard({ job }: { job: Job }) {
+  const salaryLine = getSalaryLine(job);
+  const initials = job.employer_name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+
+  return (
+    <article className="group flex flex-col rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md hover:border-[#1a6fd4]/20">
+      {job.is_featured && (
+        <span className="mb-3 inline-flex w-fit items-center gap-1 rounded-full bg-amber-50 border border-amber-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-600">
+          <BadgeCheck className="h-3 w-3" /> Featured
+        </span>
+      )}
+      <div className="flex items-start gap-3">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#0f1f3d] text-xs font-extrabold text-white shadow-sm">
+          {initials || "?"}
+        </div>
+        <div className="min-w-0 flex-1">
           <Link to="/jobs/$jobId" params={{ jobId: String(job.id) }}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#1a6fd4] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#1560be]">
-            View position <ArrowRight className="h-3.5 w-3.5" />
+            className="block text-sm font-bold text-[#0f1f3d] group-hover:text-[#1a6fd4] transition-colors line-clamp-2">
+            {job.title}
           </Link>
+          <p className="mt-0.5 text-xs text-slate-500">{job.employer_name}</p>
         </div>
+      </div>
+      <div className="mt-3 space-y-1 text-xs text-slate-400">
+        <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-slate-300" />{job.location_display}</span>
+        {salaryLine && <span className="flex items-center gap-1.5 font-bold text-emerald-600"><DollarSign className="h-3.5 w-3.5" />{salaryLine}</span>}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {(job.job_type_display || job.job_type) && (
+          <span className="rounded-full border border-[#1a6fd4]/20 bg-[#f0f4ff] px-2.5 py-0.5 text-[11px] font-semibold text-[#1a6fd4]">
+            {job.job_type_display || job.job_type}
+          </span>
+        )}
+        {(job.specialty_display || job.specialty) && (
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-[11px] text-slate-500">
+            {job.specialty_display || job.specialty}
+          </span>
+        )}
+      </div>
+      <div className="mt-auto flex items-center justify-between pt-4 border-t border-slate-100 mt-4">
+        <span className="text-[11px] text-slate-400">{timeAgo(job.created_at)}</span>
         <Link to="/jobs/$jobId" params={{ jobId: String(job.id) }}
-          className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-[#1a6fd4] px-3 py-2 text-xs font-semibold text-white sm:hidden">
-          View <ArrowRight className="h-3.5 w-3.5" />
+          className="inline-flex items-center gap-1 rounded-lg bg-[#1a6fd4] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#1560be]">
+          View <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
     </article>
@@ -186,10 +202,11 @@ function JobsPage() {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 80);
+    const onScroll = () => setScrolled(window.scrollY > 60);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
   const debouncedQ = useDebounce(q, 400);
   const debouncedSalaryMin = useDebounce(salaryMin, 600);
   const debouncedSalaryMax = useDebounce(salaryMax, 600);
@@ -213,7 +230,7 @@ function JobsPage() {
   });
 
   const SPECIALTY_OPTIONS = (apiSpecialties && apiSpecialties.length > 0) ? apiSpecialties : FALLBACK_SPECIALTIES;
-  const PROVINCES = (apiProvinces && apiProvinces.length > 0) ? apiProvinces : FALLBACK_PROVINCES;
+  const PROVINCES_LIST = (apiProvinces && apiProvinces.length > 0) ? apiProvinces : FALLBACK_PROVINCES;
 
   const { data, isLoading } = useQuery({
     queryKey: ["jobs", debouncedQ, specialty, province, jobType, practiceSetting, debouncedSalaryMin, debouncedSalaryMax],
@@ -242,47 +259,39 @@ function JobsPage() {
     setPracticeSetting(""); setSalaryMin(""); setSalaryMax("");
   }
 
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    jobType: false, specialty: false, province: false, practiceSetting: false, salary: false,
+  /* ── Sidebar filter sections with checkboxes/dropdowns like the reference ── */
+  const [openDropdowns, setOpenDropdowns] = useState<Record<string, boolean>>({
+    specialty: false, province: false, practiceSetting: false, salary: false,
   });
 
-  function toggleSection(key: string) {
-    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  function toggleDropdown(key: string) {
+    setOpenDropdowns(prev => ({ ...prev, [key]: !prev[key] }));
   }
 
-  function FilterDropdown({ id, label, value, placeholder, options, onChange }: {
+  function SelectDropdown({ id, label, value, placeholder, options, onChange }: {
     id: string; label: string; value: string; placeholder: string;
     options: { value: string; label: string }[]; onChange: (v: string) => void;
   }) {
-    const isOpen = openSections[id];
-    const selected = options.find((o) => o.value === value);
-    function select(val: string) { onChange(val); setOpenSections((prev) => ({ ...prev, [id]: false })); }
+    const isOpen = openDropdowns[id];
+    const selected = options.find(o => o.value === value);
     return (
-      <div className="px-4 py-1">
-        <button type="button" onClick={() => toggleSection(id)}
-          className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:bg-[#f0f4ff] transition">
-          <span className="flex items-center gap-2">
-            {label}
-            {value && (
-              <span className="rounded-full bg-[#1a6fd4] px-2 py-0.5 text-[10px] font-bold text-white normal-case tracking-normal">
-                {selected?.label}
-              </span>
-            )}
-          </span>
-          <ChevronDown className={`h-3.5 w-3.5 text-slate-300 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+      <div className="border-b border-slate-100 px-4 py-3">
+        <p className="mb-2 text-xs font-bold text-slate-700">{label}</p>
+        <button type="button" onClick={() => toggleDropdown(id)}
+          className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-500 transition hover:border-slate-300">
+          <span className={selected ? "text-[#0f1f3d] font-medium" : ""}>{selected?.label || placeholder}</span>
+          <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
         </button>
         {isOpen && (
-          <div className="mt-1 mb-2 rounded-xl border border-slate-100 bg-[#f8faff] overflow-hidden">
-            <button onClick={() => select("")}
-              className={`flex w-full items-center justify-between px-3 py-2 text-xs transition hover:bg-white ${value === "" ? "text-[#1a6fd4] font-semibold bg-white" : "text-slate-400"}`}>
-              {placeholder}
-              {value === "" && <Check className="h-3 w-3 text-[#1a6fd4]" />}
+          <div className="mt-1 max-h-52 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+            <button onClick={() => { onChange(""); toggleDropdown(id); }}
+              className={`flex w-full items-center justify-between px-3 py-2 text-sm transition hover:bg-slate-50 ${!value ? "font-semibold text-[#1a6fd4]" : "text-slate-500"}`}>
+              {placeholder} {!value && <Check className="h-3.5 w-3.5" />}
             </button>
-            {options.map((opt) => (
-              <button key={opt.value} onClick={() => select(opt.value)}
-                className={`flex w-full items-center justify-between border-t border-slate-100 px-3 py-2 text-xs transition hover:bg-white ${value === opt.value ? "text-[#1a6fd4] font-semibold bg-white" : "text-slate-500"}`}>
-                {opt.label}
-                {value === opt.value && <Check className="h-3 w-3 text-[#1a6fd4]" />}
+            {options.map(opt => (
+              <button key={opt.value} onClick={() => { onChange(opt.value); toggleDropdown(id); }}
+                className={`flex w-full items-center justify-between border-t border-slate-50 px-3 py-2 text-sm transition hover:bg-slate-50 ${value === opt.value ? "font-semibold text-[#1a6fd4]" : "text-slate-600"}`}>
+                {opt.label} {value === opt.value && <Check className="h-3.5 w-3.5" />}
               </button>
             ))}
           </div>
@@ -291,184 +300,222 @@ function JobsPage() {
     );
   }
 
-  function SalaryRangeFilter() {
-    const isOpen = openSections["salary"];
-    const hasValue = !!(salaryMin || salaryMax);
+  function CheckboxGroup({ label, options, value, onChange }: {
+    label: string; options: { value: string; label: string }[];
+    value: string; onChange: (v: string) => void;
+  }) {
     return (
-      <div className="px-4 py-1">
-        <button type="button" onClick={() => toggleSection("salary")}
-          className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:bg-[#f0f4ff] transition">
-          <span className="flex items-center gap-2">
-            Salary Range
-            {hasValue && <span className="rounded-full bg-[#1a6fd4] px-2 py-0.5 text-[10px] font-bold text-white normal-case tracking-normal">Set</span>}
-          </span>
-          <ChevronDown className={`h-3.5 w-3.5 text-slate-300 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
-        </button>
-        {isOpen && (
-          <div className="mt-1 mb-2 rounded-xl border border-slate-100 bg-[#f8faff] p-3 space-y-3">
-            <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Min (CAD/yr)</label>
-              <input type="number" min={0} step={10000} placeholder="e.g. 200000" value={salaryMin}
-                onChange={(e) => setSalaryMin(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-[#0f1f3d] placeholder-slate-300 outline-none transition focus:border-[#1a6fd4] focus:ring-2 focus:ring-[#1a6fd4]/10" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Max (CAD/yr)</label>
-              <input type="number" min={0} step={10000} placeholder="e.g. 500000" value={salaryMax}
-                onChange={(e) => setSalaryMax(e.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-[#0f1f3d] placeholder-slate-300 outline-none transition focus:border-[#1a6fd4] focus:ring-2 focus:ring-[#1a6fd4]/10" />
-            </div>
-            {hasValue && (
-              <button onClick={() => { setSalaryMin(""); setSalaryMax(""); }}
-                className="text-[10px] text-slate-400 hover:text-red-500 transition">
-                ✕ Clear salary filter
-              </button>
-            )}
+      <div className="border-b border-slate-100 px-4 py-3">
+        <p className="mb-2.5 text-xs font-bold text-slate-700">{label}</p>
+        <div className="space-y-2">
+          {options.map(opt => (
+            <label key={opt.value} className="flex cursor-pointer items-center gap-2.5 group">
+              <div onClick={() => onChange(value === opt.value ? "" : opt.value)}
+                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition ${
+                  value === opt.value ? "border-[#1a6fd4] bg-[#1a6fd4]" : "border-slate-300 bg-white group-hover:border-[#1a6fd4]/60"
+                }`}>
+                {value === opt.value && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
+              </div>
+              <span className={`text-sm transition ${value === opt.value ? "font-semibold text-[#0f1f3d]" : "text-slate-600 group-hover:text-[#0f1f3d]"}`}>
+                {opt.label}
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function SalaryFilter() {
+    return (
+      <div className="border-b border-slate-100 px-4 py-3">
+        <p className="mb-2 text-xs font-bold text-slate-700">Salary Range</p>
+        <div className="space-y-2">
+          <div>
+            <label className="mb-1 block text-[11px] text-slate-400 uppercase tracking-wider">Min (CAD/yr)</label>
+            <input type="number" min={0} step={10000} placeholder="e.g. 200,000" value={salaryMin}
+              onChange={e => setSalaryMin(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-[#0f1f3d] placeholder-slate-300 outline-none focus:border-[#1a6fd4] focus:ring-2 focus:ring-[#1a6fd4]/10 transition" />
           </div>
-        )}
+          <div>
+            <label className="mb-1 block text-[11px] text-slate-400 uppercase tracking-wider">Max (CAD/yr)</label>
+            <input type="number" min={0} step={10000} placeholder="e.g. 500,000" value={salaryMax}
+              onChange={e => setSalaryMax(e.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-[#0f1f3d] placeholder-slate-300 outline-none focus:border-[#1a6fd4] focus:ring-2 focus:ring-[#1a6fd4]/10 transition" />
+          </div>
+        </div>
       </div>
     );
   }
 
   const FilterPanel = () => (
-    <div className="py-2">
-      <FilterDropdown id="jobType" label="Employment Type" value={jobType} placeholder="Any type" options={JOB_TYPES} onChange={setJobType} />
-      <FilterDropdown id="specialty" label="Specialty" value={specialty} placeholder="All specialties" options={SPECIALTY_OPTIONS} onChange={setSpecialty} />
-      <FilterDropdown id="province" label="Province" value={province} placeholder="All provinces" options={PROVINCES} onChange={setProvince} />
-      <FilterDropdown id="practiceSetting" label="Practice Setting" value={practiceSetting} placeholder="Any setting" options={practiceSettings ?? []} onChange={setPracticeSetting} />
-      <SalaryRangeFilter />
+    <div>
+      <CheckboxGroup
+        label="Employment Type"
+        options={JOB_TYPES}
+        value={jobType}
+        onChange={setJobType}
+      />
+      <SelectDropdown id="specialty" label="Specialty" value={specialty} placeholder="Select specialty" options={SPECIALTY_OPTIONS} onChange={setSpecialty} />
+      <SelectDropdown id="province" label="Province / Territory" value={province} placeholder="Select province" options={PROVINCES_LIST} onChange={setProvince} />
+      <SelectDropdown id="practiceSetting" label="Practice Setting" value={practiceSetting} placeholder="Select setting" options={practiceSettings ?? []} onChange={setPracticeSetting} />
+      <SalaryFilter />
       {activeFilterCount > 0 && (
-        <div className="px-4 pt-2 pb-3">
+        <div className="px-4 py-3">
           <button onClick={clearAll}
-            className="w-full rounded-xl border border-red-100 bg-red-50 py-2 text-xs font-semibold text-red-400 transition hover:bg-red-100 hover:text-red-600">
-            ✕ Clear all filters
+            className="w-full rounded-lg bg-[#1a6fd4] py-2.5 text-sm font-bold text-white transition hover:bg-[#1560be]">
+            Apply Filters
+          </button>
+          <button onClick={clearAll}
+            className="mt-2 w-full rounded-lg border border-slate-200 py-2 text-xs font-semibold text-slate-500 transition hover:bg-slate-50">
+            Clear all
+          </button>
+        </div>
+      )}
+      {activeFilterCount === 0 && (
+        <div className="px-4 py-3">
+          <button
+            className="w-full rounded-lg bg-[#1a6fd4] py-2.5 text-sm font-bold text-white transition hover:bg-[#1560be]">
+            Apply Filters
           </button>
         </div>
       )}
     </div>
   );
 
-  /* Navbar height is 72px, so sticky top = 72px */
   const HEADER_H = 72;
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="min-h-screen bg-white">
 
-      {/* ── PAGE HERO (full, non-sticky) ── */}
-      <div className="bg-[#0f1f3d] px-4 py-10 sm:px-6 lg:px-14">
-        <div className="mx-auto max-w-7xl">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#1a6fd4]">CandianMdJobs</p>
-          <h1 className="mt-2 text-3xl font-extrabold text-white sm:text-4xl">Physician Job Board</h1>
-          <p className="mt-2 text-sm text-white/50">Browse verified opportunities across every province and specialty.</p>
-        </div>
-      </div>
-
-      {/* ── STICKY SEARCH BAR ── */}
+      {/* ── TOP NAV BAR with search (sticky) ── */}
       <div
-        className={`sticky z-30 bg-[#0f1f3d] px-4 py-3 sm:px-6 lg:px-14 transition-shadow duration-300 ${
-          scrolled ? "shadow-[0_4px_24px_rgba(0,0,0,0.3)]" : ""
-        }`}
+        className={`sticky z-30 border-b border-slate-100 bg-white transition-shadow duration-200 ${scrolled ? "shadow-sm" : ""}`}
         style={{ top: HEADER_H }}
       >
-        <div className="mx-auto max-w-7xl flex gap-2">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by title, specialty, or employer…"
-              className="w-full rounded-xl border border-white/10 bg-white/8 py-2.5 pl-10 pr-3 text-sm text-white placeholder-white/30 outline-none transition focus:border-[#1a6fd4]/60 focus:bg-white/12" />
+        <div className="mx-auto max-w-7xl px-4 py-3 lg:px-8">
+          <div className="flex items-center gap-3">
+            {/* Search input */}
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                placeholder="Search jobs, keywords, or locations..."
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-4 text-sm text-[#0f1f3d] placeholder-slate-400 outline-none transition focus:border-[#1a6fd4] focus:bg-white focus:ring-2 focus:ring-[#1a6fd4]/10"
+              />
+            </div>
+            {/* Sort by — desktop */}
+            <div className="hidden sm:flex items-center gap-2 text-sm text-slate-500 shrink-0">
+              <span>Sort by</span>
+              <select className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-[#0f1f3d] outline-none focus:border-[#1a6fd4]">
+                <option>Newest</option>
+                <option>Salary</option>
+              </select>
+            </div>
+            {/* View toggles */}
+            <div className="flex items-center gap-1 shrink-0">
+              <button onClick={() => setView("list")}
+                className={`rounded-lg border p-2 transition ${view === "list" ? "border-[#1a6fd4] bg-[#f0f4ff] text-[#1a6fd4]" : "border-slate-200 text-slate-400 hover:text-slate-600"}`}>
+                <List className="h-4 w-4" />
+              </button>
+              <button onClick={() => setView("grid")}
+                className={`rounded-lg border p-2 transition ${view === "grid" ? "border-[#1a6fd4] bg-[#f0f4ff] text-[#1a6fd4]" : "border-slate-200 text-slate-400 hover:text-slate-600"}`}>
+                <LayoutGrid className="h-4 w-4" />
+              </button>
+            </div>
+            {/* Mobile filter button */}
+            <button onClick={() => setMobileFilterOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-[#1a6fd4]/40 lg:hidden shrink-0">
+              <SlidersHorizontal className="h-4 w-4" />
+              {activeFilterCount > 0 && (
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#1a6fd4] text-[9px] font-bold text-white">{activeFilterCount}</span>
+              )}
+            </button>
           </div>
-          <button className="inline-flex items-center gap-2 rounded-xl bg-[#1a6fd4] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#1560be]">
-            <Search className="h-4 w-4" /> Search
-          </button>
         </div>
       </div>
 
       {/* ── BODY ── */}
-      <div className="flex flex-1 bg-[#f8faff] gap-4 px-3 py-4 sm:px-6 lg:gap-5 lg:px-14 lg:py-6 items-start">
+      <div className="mx-auto max-w-7xl px-4 py-5 lg:px-8">
+        <div className="flex gap-6 items-start">
 
-        {/* ── LEFT SIDEBAR ── sticky */}
-        <aside
-          className="hidden w-72 flex-none rounded-2xl border border-slate-100 bg-white shadow-sm lg:block sticky overflow-y-auto"
-          style={{ top: HEADER_H + 56, maxHeight: `calc(100vh - ${HEADER_H + 72}px)` }}
-        >
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3.5">
-            <h2 className="flex items-center gap-2 text-sm font-bold text-[#0f1f3d]">
-              <SlidersHorizontal className="h-4 w-4 text-[#1a6fd4]" /> Filters
-            </h2>
-            {activeFilterCount > 0 && (
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#1a6fd4] text-[10px] font-bold text-white">
-                {activeFilterCount}
-              </span>
-            )}
-          </div>
-          <FilterPanel />
-        </aside>
-
-        {/* ── RIGHT: toolbar + job cards ── */}
-        <div className="flex flex-1 flex-col rounded-2xl border border-slate-100 bg-white shadow-sm">
-
-          {/* Toolbar */}
-          <div className="flex-none border-b border-slate-100 bg-white px-4 py-3 sm:px-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <button onClick={() => setMobileFilterOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition hover:border-[#1a6fd4]/40 lg:hidden">
-                  <SlidersHorizontal className="h-4 w-4" /> Filters
-                  {activeFilterCount > 0 && (
-                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#1a6fd4] text-[9px] font-bold text-white">{activeFilterCount}</span>
-                  )}
+          {/* ── LEFT SIDEBAR ── */}
+          <aside
+            className="hidden w-72 flex-none rounded-2xl border border-slate-200 bg-white lg:block sticky overflow-hidden"
+            style={{ top: HEADER_H + 60, maxHeight: `calc(100vh - ${HEADER_H + 76}px)`, overflowY: "auto" }}
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+              <h2 className="flex items-center gap-2 text-sm font-bold text-[#0f1f3d]">
+                <SlidersHorizontal className="h-4 w-4 text-[#1a6fd4]" /> Filters
+              </h2>
+              {activeFilterCount > 0 && (
+                <button onClick={clearAll} className="text-xs font-semibold text-[#1a6fd4] hover:underline">
+                  Clear all
                 </button>
-
-                <p className="text-sm text-slate-400">
-                  {isLoading
-                    ? <span className="inline-block h-4 w-24 animate-pulse rounded bg-slate-100" />
-                    : <><span className="font-bold text-[#0f1f3d]">{jobs.length}</span> opportunities found</>}
-                </p>
-
-                {[
-                  specialty && { label: specialty, clear: () => setSpecialty("") },
-                  province && { label: PROVINCES.find((p) => p.value === province)?.label ?? province, clear: () => setProvince("") },
-                  jobType && { label: JOB_TYPES.find((t) => t.value === jobType)?.label ?? jobType, clear: () => setJobType("") },
-                  practiceSetting && { label: (practiceSettings ?? []).find((s) => s.value === practiceSetting)?.label ?? practiceSetting, clear: () => setPracticeSetting("") },
-                  (salaryMin || salaryMax) && { label: `$${salaryMin || "0"} – $${salaryMax || "∞"}`, clear: () => { setSalaryMin(""); setSalaryMax(""); } },
-                ].filter(Boolean).map((tag) => {
-                  const t = tag as { label: string; clear: () => void };
-                  return (
-                    <button key={t.label} onClick={t.clear}
-                      className="inline-flex items-center gap-1 rounded-full border border-[#1a6fd4]/20 bg-[#1a6fd4]/8 px-2.5 py-0.5 text-xs font-medium text-[#1a6fd4] hover:bg-[#1a6fd4]/15 transition">
-                      {t.label} <X className="h-3 w-3" />
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <button onClick={() => setView("list")}
-                  className={`rounded-lg border p-2 transition ${view === "list" ? "border-[#1a6fd4] bg-[#1a6fd4]/10 text-[#1a6fd4]" : "border-slate-200 text-slate-400 hover:text-slate-600"}`}>
-                  <List className="h-4 w-4" />
-                </button>
-                <button onClick={() => setView("grid")}
-                  className={`rounded-lg border p-2 transition ${view === "grid" ? "border-[#1a6fd4] bg-[#1a6fd4]/10 text-[#1a6fd4]" : "border-slate-200 text-slate-400 hover:text-slate-600"}`}>
-                  <LayoutGrid className="h-4 w-4" />
-                </button>
-              </div>
+              )}
             </div>
-          </div>
+            <FilterPanel />
+          </aside>
 
-          {/* Job cards */}
-          <div className="px-3 py-3 sm:px-4 sm:py-4">
-            <div className={view === "grid" ? "grid gap-3 sm:grid-cols-2" : "space-y-2.5"}>
-              {isLoading && Array.from({ length: 6 }).map((_, i) => <JobCardSkeleton key={i} />)}
-              {!isLoading && jobs.map((j) => <JobCard key={j.id} job={j} view={view} />)}
+          {/* ── RIGHT: results ── */}
+          <div className="flex-1 min-w-0">
+
+            {/* Results count + active tags */}
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <p className="text-sm text-slate-500">
+                {isLoading
+                  ? <span className="inline-block h-4 w-32 animate-pulse rounded bg-slate-100" />
+                  : <>Showing 1–{jobs.length} of <span className="font-bold text-[#0f1f3d]">{jobs.length}</span> jobs</>
+                }
+              </p>
+              {[
+                specialty && { label: SPECIALTY_OPTIONS.find(s => s.value === specialty)?.label ?? specialty, clear: () => setSpecialty("") },
+                province && { label: PROVINCES_LIST.find(p => p.value === province)?.label ?? province, clear: () => setProvince("") },
+                jobType && { label: JOB_TYPES.find(t => t.value === jobType)?.label ?? jobType, clear: () => setJobType("") },
+                practiceSetting && { label: (practiceSettings ?? []).find(s => s.value === practiceSetting)?.label ?? practiceSetting, clear: () => setPracticeSetting("") },
+                (salaryMin || salaryMax) && { label: `$${salaryMin || "0"} – $${salaryMax || "∞"}`, clear: () => { setSalaryMin(""); setSalaryMax(""); } },
+              ].filter(Boolean).map(tag => {
+                const t = tag as { label: string; clear: () => void };
+                return (
+                  <button key={t.label} onClick={t.clear}
+                    className="inline-flex items-center gap-1 rounded-full border border-[#1a6fd4]/25 bg-[#f0f4ff] px-2.5 py-0.5 text-xs font-medium text-[#1a6fd4] transition hover:bg-[#1a6fd4]/15">
+                    {t.label} <X className="h-3 w-3" />
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Cards container */}
+            <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+              {isLoading && (
+                <div>
+                  {Array.from({ length: 8 }).map((_, i) => <JobCardSkeleton key={i} />)}
+                </div>
+              )}
+
               {!isLoading && jobs.length === 0 && (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-14 text-center">
-                  <Search className="mx-auto h-10 w-10 text-slate-200" />
-                  <p className="mt-4 font-semibold text-[#0f1f3d]">No jobs match your filters</p>
+                <div className="py-20 text-center">
+                  <Search className="mx-auto h-12 w-12 text-slate-200" />
+                  <p className="mt-4 text-base font-bold text-[#0f1f3d]">No jobs match your filters</p>
                   <p className="mt-1 text-sm text-slate-400">Try broadening your search or clearing some filters.</p>
                   <button onClick={clearAll}
-                    className="mt-4 rounded-lg bg-[#1a6fd4] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#1560be]">
+                    className="mt-5 rounded-xl bg-[#1a6fd4] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#1560be]">
                     Clear filters
                   </button>
                 </div>
+              )}
+
+              {!isLoading && jobs.length > 0 && (
+                view === "list" ? (
+                  <div>
+                    {jobs.map(j => <JobCard key={j.id} job={j} />)}
+                  </div>
+                ) : (
+                  <div className="grid gap-4 p-4 sm:grid-cols-2">
+                    {jobs.map(j => <GridJobCard key={j.id} job={j} />)}
+                  </div>
+                )
               )}
             </div>
           </div>
@@ -485,13 +532,6 @@ function JobsPage() {
               <button onClick={() => setMobileFilterOpen(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100">
                 <X className="h-5 w-5" />
               </button>
-            </div>
-            <div className="border-b border-slate-100 px-4 py-3">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search jobs…"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-[#1a6fd4] focus:ring-2 focus:ring-[#1a6fd4]/10" />
-              </div>
             </div>
             <div className="flex-1 overflow-y-auto"><FilterPanel /></div>
             <div className="border-t border-slate-100 p-4">

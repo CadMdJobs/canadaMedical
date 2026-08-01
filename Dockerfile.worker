@@ -1,0 +1,44 @@
+# Celery worker — reuses the same build stages as Dockerfile
+# Only difference: CMD ["worker"] instead of CMD ["daphne"]
+
+FROM python:3.12-slim AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    libjpeg-dev \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY requirements.txt .
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+
+FROM python:3.12-slim AS runtime
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    libjpeg62-turbo \
+    zlib1g \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 1001 appgroup \
+    && useradd --uid 1001 --gid appgroup --no-create-home --shell /sbin/nologin appuser
+
+WORKDIR /app
+
+COPY --from=builder /install /usr/local
+COPY --chown=root:root . .
+
+RUN mkdir -p /app/media /app/staticfiles /app/logs \
+    && chown -R appuser:appgroup /app/media /app/staticfiles /app/logs \
+    && chmod -R 750 /app/media /app/staticfiles /app/logs
+
+RUN chmod +x /app/entrypoint.sh
+
+USER appuser
+
+ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["worker"]

@@ -133,8 +133,10 @@ function Hero() {
           alt="Physician"
           className="h-full w-full object-cover object-top-right"
         />
-        {/* Left-side gradient overlay so text is readable */}
-        <div className="absolute inset-0 bg-linear-to-r from-[#1a6fd4]/30 via-[#1a6fd4]/10 via-20% to-transparent" />
+        {/* Mobile: navy overlay so text is readable */}
+        <div className="absolute inset-0 bg-[#0A1628]/70 sm:bg-transparent" />
+        {/* Desktop: left-side gradient */}
+        <div className="absolute inset-0 hidden sm:block bg-linear-to-r from-white/80 via-white/50 via-40% to-transparent" />
         {/* Bottom fade */}
         <div className="absolute inset-x-0 bottom-0 h-6 bg-linear-to-t from-white/40 to-transparent" />
       </div>
@@ -147,29 +149,29 @@ function Hero() {
           <div className="max-w-xl">
             {/* Badges */}
             <div className="flex flex-wrap items-center gap-2 mb-5">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[#1a6fd4]">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 border border-white/30 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-white sm:bg-blue-50 sm:border-blue-100 sm:text-[#1a6fd4]">
                 Simplify
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[#1a6fd4]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#1a6fd4] animate-pulse" />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 border border-white/30 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-white sm:bg-blue-50 sm:border-blue-100 sm:text-[#1a6fd4]">
+                <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse sm:bg-[#1a6fd4]" />
                 Canada's #1 Physician Job Site
               </span>
             </div>
 
             {/* Headline */}
-            <h1 className="text-4xl font-extrabold leading-[1.1] tracking-tight text-primary sm:text-5xl lg:text-[56px]">
+            <h1 className="text-4xl font-extrabold leading-[1.1] tracking-tight text-white sm:text-primary sm:text-5xl lg:text-[56px]">
               <span className="block">The smarter way</span>
               <span className="block">to hire a</span>
               <span
                 key={specIdx}
-                className="block text-[#1a6fd4] mt-1"
+                className="block text-[#7eb8f7] sm:text-[#1a6fd4] mt-1"
                 style={{ animation: "fadeUp 0.4s ease both" }}
               >
                 {ROTATING_SPECIALTIES[specIdx]}
               </span>
             </h1>
 
-            <p className="mt-5 max-w-md text-base leading-relaxed text-slate-600">
+            <p className="mt-5 max-w-md text-base leading-relaxed text-white/80 sm:text-slate-600">
               Permanent, locum, and academic roles at Canada's top hospitals &amp; health authorities, and clinics — matched to your specialty, province, and lifestyle.
             </p>
 
@@ -214,7 +216,7 @@ function Hero() {
               </Link>
               <Link
                 to="/employers"
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white/80 backdrop-blur-sm px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-[#1a6fd4]/40 hover:bg-white"
+                className="inline-flex items-center gap-2 rounded-xl border border-white/40 bg-white/15 backdrop-blur-sm px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/25 sm:border-slate-300 sm:bg-white/80 sm:text-slate-700 sm:hover:border-[#1a6fd4]/40 sm:hover:bg-white"
               >
                 I'm hiring →
               </Link>
@@ -228,14 +230,14 @@ function Hero() {
                     <Star key={i} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
                   ))}
                 </div>
-                <span className="text-slate-500 text-xs">4.9/5 from 2,300+ reviews</span>
+                <span className="text-white/70 text-xs sm:text-slate-500">4.9/5 from 2,300+ reviews</span>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                <ShieldCheck className="h-4 w-4 text-[#1a6fd4]" />
+              <div className="flex items-center gap-1.5 text-xs text-white/70 sm:text-slate-500">
+                <ShieldCheck className="h-4 w-4 text-white/80 sm:text-[#1a6fd4]" />
                 College verified employers
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-500">
-                <BadgeCheck className="h-4 w-4 text-[#1a6fd4]" />
+              <div className="flex items-center gap-1.5 text-xs text-white/70 sm:text-slate-500">
+                <BadgeCheck className="h-4 w-4 text-white/80 sm:text-[#1a6fd4]" />
                 3-5K more hires
               </div>
             </div>

@@ -9,7 +9,7 @@ DEBUG = config('DEBUG', default=False, cast=bool)
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-me-in-production-use-a-long-random-string')
 if not DEBUG and SECRET_KEY.startswith('django-insecure'):
     raise ValueError('SECRET_KEY must be set to a secure value in production.')
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+ALLOWED_HOSTS = list(set(config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())) | {'localhost', '127.0.0.1'})
 
 INSTALLED_APPS = [
     'daphne',
@@ -90,10 +90,8 @@ if REDIS_URL:
             'LOCATION': REDIS_URL,
             'KEY_PREFIX': 'canadamed',
             'OPTIONS': {
-                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-                'SOCKET_CONNECT_TIMEOUT': 5,
-                'SOCKET_TIMEOUT': 5,
-                'IGNORE_EXCEPTIONS': True,  # cache miss gracefully degrades, never crashes
+                'socket_connect_timeout': 5,
+                'socket_timeout': 5,
             },
         }
     }
@@ -251,13 +249,26 @@ if DEBUG:
     })
 else:
     # Production: only exact origins — no localhost wildcards
+    _extra_origin = config('CORS_EXTRA_ORIGIN', default='')
     CORS_ALLOWED_ORIGINS = list({
         _frontend_url,
-        config('CORS_EXTRA_ORIGIN', default=''),
+        _extra_origin,
     } - {''})
+    # Also allow www subdomain of the frontend URL automatically
+    import re as _re
+    _domain = _re.sub(r'^https?://(www\.)?', '', _frontend_url).rstrip('/')
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        rf'^https?://(www\.)?{_re.escape(_domain)}$',
+    ]
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_EXPOSE_HEADERS = ['Content-Disposition']
+CORS_EXPOSE_HEADERS = ['Content-Disposition', 'X-Request-ID']
+
+# Allow the custom X-Request-ID header the frontend sends for log correlation
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'x-request-id',
+]
 
 # Django 4+ rejects POSTs whose Origin is not listed here, which otherwise makes
 # the admin login fail with "CSRF verification failed" as soon as the site is
@@ -267,6 +278,8 @@ CORS_EXPOSE_HEADERS = ['Content-Disposition']
 CSRF_TRUSTED_ORIGINS = list({
     origin for origin in (
         [_frontend_url, config('CORS_EXTRA_ORIGIN', default='')]
+        # Both schemes: staging runs on plain HTTP behind no proxy, production
+        # on HTTPS behind Coolify's, and the same list has to satisfy both.
         + [
             f'{scheme}://{host}'
             for host in ALLOWED_HOSTS
