@@ -257,6 +257,11 @@ services:
     volumes:
       - backend_logs:/app/logs
     command: ["beat"]
+    # Beat is a scheduler with no socket to probe, but the image carries a
+    # HEALTHCHECK that curls localhost:8000 — nothing listens there in this
+    # container, so it was permanently unhealthy. Disable rather than fake it.
+    healthcheck:
+      disable: true
     depends_on:
       backend:
         condition: service_healthy
@@ -287,11 +292,14 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      # /healthz answers 200 from outside, so the endpoint is fine. Using the
+      # shell form and -O- keeps this working across busybox and GNU wget,
+      # whose flag handling differs.
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
     networks:
       - backend
     logging:
