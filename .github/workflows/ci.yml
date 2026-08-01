@@ -100,6 +100,10 @@ jobs:
         with:
           bun-version: "1.2.18"
 
+      # --frozen-lockfile makes CI fail on a stale lockfile rather than quietly
+      # resolving different versions than the ones that ship. It was failing
+      # because bun.lock had drifted from package.json; regenerating the
+      # lockfile fixed that, so the check is worth keeping.
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
