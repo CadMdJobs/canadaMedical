@@ -8,16 +8,13 @@ http://148.230.92.247        → frontend (React)
 http://148.230.92.247:8001   → backend  (Django API + WebSocket)
 ```
 
-**Two Coolify resources, one per repository:**
+Compose file: `docker-compose.staging.yml` — one Coolify resource covering all
+seven services.
 
-| Resource | Repository | Compose file |
-| -------- | ---------- | ------------ |
-| backend  | `CadMdJobs/canadaMedical` | `/docker-compose.staging.yml` |
-| frontend | `CadMdJobs/canadaMedicalFrontend` | `/docker-compose.staging.yml` |
-
-They are split so a UI change redeploys the SPA alone, without restarting the
-API, Celery workers and the database. The backend compose in this repo contains
-no `frontend` service for that reason.
+The SPA lives in this repository under `canadamedical-frontend/`; there is no
+separate frontend repo for this project. (`CadMdJobs/canadaMedicalFrontend` is
+an unrelated pediatric-clinic app with a confusingly similar name — do not
+deploy from it.)
 
 When the domain arrives, switch to `docker-compose.coolify.yml` — see
 `deploy/COOLIFY.md` and the migration notes at the bottom of this file.
@@ -37,26 +34,21 @@ on the VPS speaking HTTP to each other, which is consistent and works.
 
 ---
 
-## 1. Create the resources in Coolify
+## 1. Create the resource in Coolify
 
-Two resources, created the same way — Coolify → Project → **New Resource →
-Public Repository**, then set **Build Pack: Docker Compose**:
+Coolify → Project → **New Resource → Public Repository**, then set **Build
+Pack: Docker Compose**:
 
-**Backend**
 - Repository: `https://github.com/CadMdJobs/canadaMedical`
+- Branch: `main`
+- Base Directory: `/`
 - Compose file path: `/docker-compose.staging.yml`
+- Build server: `localhost`
 
-**Frontend**
-- Repository: `https://github.com/CadMdJobs/canadaMedicalFrontend`
-- Compose file path: `/docker-compose.staging.yml`
-
-For both: branch `main`, build server `localhost`, and **leave every Domain
-field blank**. There is no hostname to route, so the containers publish ports
-directly rather than going through Traefik. Generating a domain would give the
-service an HTTPS URL, which then cannot call the plain-HTTP API.
-
-The frontend repo must be **public** for this to work. A private one needs a
-GitHub App configured under Coolify → Sources first.
+**Leave every Domain field blank.** There is no hostname to route, so the
+containers publish ports directly rather than going through Traefik. Generating
+a domain would give the service an HTTPS URL, which then could not call the
+plain-HTTP API.
 
 ---
 
@@ -133,10 +125,9 @@ RESEND_FROM_EMAIL=
 RESEND_TEST_EMAIL=
 ```
 
-### Frontend variables
+### Build variables
 
-These two go on the **frontend** resource, not the backend one, and must be
-marked **Available at Buildtime** in Coolify:
+These two must be marked **Available at Buildtime** in Coolify:
 
 ```ini
 VITE_API_URL=http://148.230.92.247:8001
