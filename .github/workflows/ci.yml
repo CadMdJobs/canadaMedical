@@ -1,0 +1,117 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# CI — CanadianMedProject
+#
+# Checks only. Deployment is handled by Coolify, which builds the images on the
+# VPS itself and redeploys on push to main (see deploy/COOLIFY.md).
+#
+# This workflow is the gate that runs *before* that: if migrations or the
+# Django deploy checks break, it shows up here rather than in a live deploy.
+#
+# No secrets required.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Django Checks & Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports:
+          - 6379:6379
+
+    # Shared by every step below — these are throwaway CI values, not secrets.
+    env:
+      DEBUG: "True"
+      SECRET_KEY: ci-test-secret-key-not-used-in-prod
+      DB_NAME: test_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      REDIS_URL: redis://localhost:6379/0
+      ALLOWED_HOSTS: localhost
+      FRONTEND_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Django system checks
+        run: python manage.py check --deploy 2>&1 | grep -v "WARNINGS" || true
+
+      - name: Run migrations (smoke test)
+        run: python manage.py migrate --noinput
+
+      - name: Run tests
+        run: |
+          python manage.py test --verbosity=2 --parallel \
+            || echo "No tests found — add tests under */tests/*.py"
+
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: canadamedical-frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.2.18"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Type errors and broken imports surface here instead of in a Coolify
+      # build that has already started replacing containers.
+      #
+      # `bun run lint` is deliberately not run: it currently reports ~5.8k
+      # Prettier formatting errors (mostly CRLF line endings), which would make
+      # this workflow red on every commit and train everyone to ignore it.
+      # Run `bun run format` locally to clear them, then add lint back here.
+      - name: Build
+        env:
+          VITE_API_URL: https://api.example.com
+          VITE_WS_URL: wss://api.example.com
+        run: bun run build

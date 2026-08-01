@@ -1,11 +1,38 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Frontend .dockerignore — exclude heavy/sensitive dirs from Vite build context
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Dependencies (reinstalled inside Docker)
 node_modules/
+.pnp
+.pnp.js
+
+# Build output (produced inside Docker)
 dist/
+build/
+
+# Cache
+.cache/
+coverage/
+
+# Secrets
 .env
 .env.*
 !.env.example
-.git/
+
+# Dev tooling artefacts
+.eslintcache
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor / OS
 .DS_Store
 Thumbs.db
-coverage/
-.cache/
+.vscode/
+.idea/
+
+# Version control
+.git/
+.gitignore

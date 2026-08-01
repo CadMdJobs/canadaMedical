@@ -1,0 +1,245 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Staging / no-domain Docker Compose — CanadianMedProject
+#
+# For running on a bare VPS IP before a domain exists. Everything is served
+# over plain HTTP on published ports:
+#
+#   http://VPS_IP        → frontend (React SPA)
+#   http://VPS_IP:8000   → backend  (Django API + WebSocket)
+#
+# Why this file exists separately from docker-compose.coolify.yml:
+#   Traefik routes by hostname. With no domain there is no hostname to match,
+#   so the containers publish ports directly instead of going through the
+#   proxy. Once a domain is available, switch to docker-compose.coolify.yml —
+#   it drops these ports and lets Coolify terminate TLS.
+#
+# ⚠️ This is HTTP only. Passwords and JWTs travel unencrypted, so treat it as a
+#    demo/staging environment: do not put real physician or payment data in it.
+#
+# In Coolify: New Resource → Docker Compose → this file, set no domains.
+# See deploy/COOLIFY.md for the environment variables.
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-backend-common: &backend-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  environment:
+    DB_HOST: pgbouncer
+    DB_PORT: 5432
+    DB_NAME: ${DB_NAME}
+    DB_USER: ${DB_USER}
+    DB_PASSWORD: ${DB_PASSWORD}
+    REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+    SECRET_KEY: ${SECRET_KEY}
+    DEBUG: ${DEBUG:-False}
+    ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+    FRONTEND_URL: ${FRONTEND_URL}
+    CORS_EXTRA_ORIGIN: ${CORS_EXTRA_ORIGIN:-}
+    # Must stay False here: there is no TLS in front, so SECURE_SSL_REDIRECT
+    # would bounce every request into an https:// URL that nothing serves.
+    SECURE_SSL: "False"
+    DB_CONN_MAX_AGE: ${DB_CONN_MAX_AGE:-0}
+    DJANGO_ADMIN_URL: ${DJANGO_ADMIN_URL:-admin}
+    STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+    STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+    STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+    RESEND_API_KEY: ${RESEND_API_KEY:-}
+    RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+    RESEND_TEST_EMAIL: ${RESEND_TEST_EMAIL:-}
+    AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+    AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+    AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-}
+    AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME:-ca-central-1}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    CELERY_CONCURRENCY: ${CELERY_CONCURRENCY:-2}
+  depends_on:
+    pgbouncer:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks:
+    - backend
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── pgBouncer — connection pooler ────────────────────────────────────────────
+  pgbouncer:
+    image: edoburu/pgbouncer:1.23.1
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 200
+      DEFAULT_POOL_SIZE: 20
+      RESERVE_POOL_SIZE: 5
+      SERVER_IDLE_TIMEOUT: 600
+      SERVER_LIFETIME: 3600
+      AUTH_TYPE: md5
+      IGNORE_STARTUP_PARAMETERS: extra_float_digits,options
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U ${DB_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - backend
+
+  # ── Redis ────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      redis-server /usr/local/etc/redis/redis.conf
+      --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+      - ./deploy/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Django / Daphne (web) ────────────────────────────────────────────────────
+  # Published on 0.0.0.0 so the API is reachable at http://VPS_IP:8001
+  # Host port is 8001, not 8000: Coolify's own dashboard occupies 8000 on this
+  # VPS. Inside the container Daphne still listens on 8000.
+  backend:
+    <<: *backend-common
+    ports:
+      - "8001:8000"
+    volumes:
+      - media_files:/app/media
+      - static_files:/app/staticfiles
+      - backend_logs:/app/logs
+    command: ["daphne"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # ── Celery Worker ────────────────────────────────────────────────────────────
+  celery-worker:
+    <<: *backend-common
+    volumes:
+      - media_files:/app/media
+      - backend_logs:/app/logs
+    command: ["worker"]
+    healthcheck:
+      test: ["CMD-SHELL",
+        "celery -A core inspect ping -d celery@$$HOSTNAME --timeout 5 2>/dev/null | grep -q pong || exit 1"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ── Celery Beat (scheduler) — must stay a singleton ──────────────────────────
+  celery-beat:
+    <<: *backend-common
+    volumes:
+      - backend_logs:/app/logs
+    command: ["beat"]
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # ── React / Nginx (frontend) ─────────────────────────────────────────────────
+  # Served on port 80 → http://VPS_IP
+  # VITE_* are build args baked into the bundle, so they must point at the same
+  # scheme the browser uses (http://VPS_IP:8000, not https://).
+  frontend:
+    build:
+      context: ./canadamedical-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+        VITE_WS_URL: ${VITE_WS_URL}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ─────────────────────────────────────────────────────────────────────────────
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  media_files:
+    driver: local
+  static_files:
+    driver: local
+  backend_logs:
+    driver: local

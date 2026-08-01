@@ -1,19 +1,62 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Backend .dockerignore — keeps build context lean and secrets out of images
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Python artifacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/*.pdb
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
 venv/
 .venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+env/
+.env/
+
+# Secrets — NEVER bake into image
 .env
 .env.*
 !.env.example
-media/
-staticfiles/
-static_root/
-*.log
+secrets/
+
+# Version control
 .git/
 .gitignore
+.gitattributes
+.github/
+
+# Frontend (built separately — not needed in backend image)
 canadamedical-frontend/
-README.md
+
+# Generated / runtime files
+media/
+staticfiles/
+logs/
+*.log
+
+# Dev/test tooling
+run_endpoints.py
+schema.yaml
+*.http
 .DS_Store
 Thumbs.db
+
+# Docs
+README.md
+runOnMac.md
+CHANGELOG.md
+docs/
+
+# Docker files (not needed inside the image itself)
+docker-compose*.yml
+Dockerfile*
+deploy/

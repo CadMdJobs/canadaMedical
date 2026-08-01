@@ -1,0 +1,13 @@
+# Shell scripts must keep LF endings. Git on Windows would otherwise check them
+# out as CRLF, and a CRLF shebang makes Linux fail the container with
+# "bad interpreter: no such file or directory" — which is what runs
+# entrypoint.sh inside the backend image.
+*.sh text eol=lf
+entrypoint.sh text eol=lf
+
+# Same reasoning for anything else read by Linux tooling at runtime.
+Dockerfile text eol=lf
+*.conf text eol=lf
+*.ini text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

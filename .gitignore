@@ -92,6 +92,10 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 
+# ── Production secrets (never commit) ────────────────────────────────────────
+.env.production
+deploy/pgbouncer/userlist.txt
+
 # ── Misc ─────────────────────────────────────────────────────────────────────
 schema.yaml
 *.bak

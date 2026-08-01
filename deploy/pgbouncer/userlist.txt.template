@@ -1,0 +1,9 @@
+# pgBouncer userlist — generated at deploy time, NEVER commit the real file
+# Format: "username" "md5<md5(password+username)>"
+#
+# Generate the md5 hash:
+#   echo -n "${DB_PASSWORD}${DB_USER}" | md5sum | awk '{print "md5"$1}'
+#
+# Replace placeholders below and save as userlist.txt (excluded from git)
+"REPLACE_DB_USER" "md5REPLACE_MD5_HASH"
+"pgbouncer_admin" "md5REPLACE_ADMIN_MD5_HASH"

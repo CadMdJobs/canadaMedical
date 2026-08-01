@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import timedelta
 from decouple import config, Csv
+import logging
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -29,6 +30,7 @@ INSTALLED_APPS = [
     'channels',
     # Third-party (task queue)
     'django_celery_results',
+    'django_celery_beat',
     # Local apps
     'accounts',
     'jobs',
@@ -47,10 +49,12 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
+    'core.middleware.RequestIDMiddleware',       # attach X-Request-ID to every request/response
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'core.middleware.AdminIPRestrictionMiddleware',  # restrict /admin/ by IP in production
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -77,6 +81,29 @@ WSGI_APPLICATION = 'core.wsgi.application'
 ASGI_APPLICATION = 'core.asgi.application'
 
 REDIS_URL = config('REDIS_URL', default='')
+
+# ── Django cache (Redis when available, LocMemCache fallback) ─────────────────
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+            'KEY_PREFIX': 'canadamed',
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+                'SOCKET_CONNECT_TIMEOUT': 5,
+                'SOCKET_TIMEOUT': 5,
+                'IGNORE_EXCEPTIONS': True,  # cache miss gracefully degrades, never crashes
+            },
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'canadamed-default',
+        }
+    }
 
 if REDIS_URL:
     CHANNEL_LAYERS = {
@@ -111,6 +138,29 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # one task at a time per worker thread
 if DEBUG:
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
+
+# ── Celery Beat periodic tasks ────────────────────────────────────────────────
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+from celery.schedules import crontab  # noqa: E402
+
+CELERY_BEAT_SCHEDULE = {
+    # Clean up expired JWT blacklisted tokens (SimpleJWT built-in)
+    'flush-expired-tokens': {
+        'task': 'core.tasks.flush_expired_tokens',
+        'schedule': crontab(hour=3, minute=0),     # 3 AM UTC daily
+    },
+    # Update platform stats cache
+    'refresh-platform-stats': {
+        'task': 'stats.tasks.refresh_platform_stats',
+        'schedule': crontab(minute='*/15'),         # every 15 min
+    },
+    # Cancel subscriptions past their end date
+    'expire-subscriptions': {
+        'task': 'subscriptions.tasks.expire_past_due_subscriptions',
+        'schedule': crontab(hour=1, minute=0),     # 1 AM UTC daily
+    },
+}
 
 DATABASES = {
     'default': {
@@ -187,17 +237,44 @@ SIMPLE_JWT = {
     'TOKEN_OBTAIN_SERIALIZER': 'accounts.serializers.CustomTokenObtainPairSerializer',
 }
 
-CORS_ALLOWED_ORIGINS = list({
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:8080",
-    "http://127.0.0.1:8080",
-    config('FRONTEND_URL', default='http://localhost:5173'),
-})
+_frontend_url = config('FRONTEND_URL', default='http://localhost:5173')
+
+if DEBUG:
+    CORS_ALLOWED_ORIGINS = list({
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        _frontend_url,
+    })
+else:
+    # Production: only exact origins — no localhost wildcards
+    CORS_ALLOWED_ORIGINS = list({
+        _frontend_url,
+        config('CORS_EXTRA_ORIGIN', default=''),
+    } - {''})
+
 CORS_ALLOW_CREDENTIALS = True
 CORS_EXPOSE_HEADERS = ['Content-Disposition']
+
+# Django 4+ rejects POSTs whose Origin is not listed here, which otherwise makes
+# the admin login fail with "CSRF verification failed" as soon as the site is
+# served from anything other than localhost. Derived from the hosts we already
+# trust, plus each ALLOWED_HOSTS entry under both schemes so a bare-IP or
+# staging deployment works without extra configuration.
+CSRF_TRUSTED_ORIGINS = list({
+    origin for origin in (
+        [_frontend_url, config('CORS_EXTRA_ORIGIN', default='')]
+        + [
+            f'{scheme}://{host}'
+            for host in ALLOWED_HOSTS
+            if host not in ('*', 'localhost', '127.0.0.1')
+            for scheme in ('https', 'http')
+        ]
+    ) if origin
+})
 
 USE_S3 = config('AWS_STORAGE_BUCKET_NAME', default='') != ''
 
@@ -294,6 +371,10 @@ SPECTACULAR_SETTINGS = {
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 
+LOG_LEVEL = config('LOG_LEVEL', default='WARNING' if not DEBUG else 'INFO')
+LOG_DIR = BASE_DIR / 'logs'
+LOG_DIR.mkdir(exist_ok=True)
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -302,36 +383,107 @@ LOGGING = {
             'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
             'style': '{',
         },
+        'json': {
+            '()': 'django.utils.log.ServerFormatter',
+            'format': '%(asctime)s %(levelname)s %(name)s %(message)s',
+        },
+    },
+    'filters': {
+        'require_debug_false': {'()': 'django.utils.log.RequireDebugFalse'},
+        'require_debug_true':  {'()': 'django.utils.log.RequireDebugTrue'},
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
         },
+        'rotating_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOG_DIR / 'django.log',
+            'maxBytes': 20 * 1024 * 1024,   # 20 MB
+            'backupCount': 5,
+            'formatter': 'verbose',
+        },
+        'error_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOG_DIR / 'errors.log',
+            'maxBytes': 10 * 1024 * 1024,
+            'backupCount': 5,
+            'formatter': 'verbose',
+            'level': 'ERROR',
+        },
     },
     'root': {
-        'handlers': ['console'],
-        'level': 'WARNING',
+        'handlers': ['console', 'rotating_file'],
+        'level': LOG_LEVEL,
     },
     'loggers': {
         'django': {
-            'handlers': ['console'],
+            'handlers': ['console', 'rotating_file', 'error_file'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'django.security': {
+            'handlers': ['console', 'error_file'],
             'level': 'WARNING',
+            'propagate': False,
+        },
+        'celery': {
+            'handlers': ['console', 'rotating_file'],
+            'level': LOG_LEVEL,
             'propagate': False,
         },
         'accounts': {
-            'handlers': ['console'],
-            'level': 'WARNING',
+            'handlers': ['console', 'rotating_file'],
+            'level': LOG_LEVEL,
             'propagate': False,
         },
         'stats': {
-            'handlers': ['console'],
-            'level': 'WARNING',
+            'handlers': ['console', 'rotating_file'],
+            'level': LOG_LEVEL,
             'propagate': False,
         },
     },
 }
 
+# ── Sentry ────────────────────────────────────────────────────────────────────
+SENTRY_DSN = config('SENTRY_DSN', default='')
+if SENTRY_DSN and not DEBUG:
+    import sentry_sdk
+    from sentry_sdk.integrations.django import DjangoIntegration
+    from sentry_sdk.integrations.celery import CeleryIntegration
+    from sentry_sdk.integrations.redis import RedisIntegration
+    from sentry_sdk.integrations.logging import LoggingIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[
+            DjangoIntegration(transaction_style='url'),
+            CeleryIntegration(monitor_beat_tasks=True),
+            RedisIntegration(),
+            LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
+        ],
+        traces_sample_rate=config('SENTRY_TRACES_RATE', default=0.1, cast=float),
+        profiles_sample_rate=config('SENTRY_PROFILES_RATE', default=0.05, cast=float),
+        environment=config('SENTRY_ENVIRONMENT', default='production'),
+        send_default_pii=False,
+    )
+
+# ── Django admin URL hardening ────────────────────────────────────────────────
+# Change DJANGO_ADMIN_URL in .env.production to something unguessable.
+# e.g. DJANGO_ADMIN_URL=mgt-a7f3d291
+DJANGO_ADMIN_URL = config('DJANGO_ADMIN_URL', default='admin')
+
+# ── Security hardening (always-on, even in DEBUG) ─────────────────────────────
+SESSION_COOKIE_HTTPONLY = True      # JS cannot access session cookie
+CSRF_COOKIE_HTTPONLY = True         # JS cannot access CSRF cookie
+CSRF_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_SAMESITE = 'Lax'
+SECURE_BROWSER_XSS_FILTER = True    # X-XSS-Protection header
+SECURE_CONTENT_TYPE_NOSNIFF = True  # X-Content-Type-Options: nosniff
+X_FRAME_OPTIONS = 'DENY'
+
+# ── Production-only SSL / HSTS ────────────────────────────────────────────────
 if not DEBUG and config('SECURE_SSL', default=False, cast=bool):
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
@@ -339,5 +491,19 @@ if not DEBUG and config('SECURE_SSL', default=False, cast=bool):
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    X_FRAME_OPTIONS = 'DENY'
+
+# ── Django admin hardening ────────────────────────────────────────────────────
+# Restrict Django admin to staff-only IPs in production (set via env).
+# Format: comma-separated CIDR or IP list, e.g. "1.2.3.4,10.0.0.0/8"
+ADMIN_ALLOWED_IPS_RAW = config('ADMIN_ALLOWED_IPS', default='')
+ADMIN_ALLOWED_IPS = [ip.strip() for ip in ADMIN_ALLOWED_IPS_RAW.split(',') if ip.strip()]
+
+# ── Django REST Framework: disable Browsable API in production ────────────────
+if not DEBUG:
+    REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = [
+        'rest_framework.renderers.JSONRenderer',
+    ]
+
+# ── Request ID middleware (optional — add to MIDDLEWARE if using structured logging) ──
+# Uncomment to enable per-request trace IDs in logs:
+# MIDDLEWARE += ['core.middleware.RequestIDMiddleware']
