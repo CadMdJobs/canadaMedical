@@ -1,16 +1,18 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# CI — CanadianMedProject
+# CI/CD — CanadianMedProject
 #
-# Checks only. Deployment is handled by Coolify, which builds the images on the
-# VPS itself and redeploys on push to main (see deploy/COOLIFY.md).
+# Checks run first; a deploy is triggered only if they pass. Coolify still does
+# the deploying — it builds the images on the VPS — but it is called from here
+# rather than from its own GitHub webhook, so a failing test stops the release.
 #
-# This workflow is the gate that runs *before* that: if migrations or the
-# Django deploy checks break, it shows up here rather than in a live deploy.
+# That webhook (repo → Settings → Webhooks) must stay **disabled**. With both
+# paths live, Coolify deploys straight from the push and the gate does nothing.
 #
-# No secrets required.
+# Required secret:
+#   COOLIFY_TOKEN — API token from Coolify → Keys & Tokens
 # ─────────────────────────────────────────────────────────────────────────────
 
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -119,3 +121,32 @@ jobs:
           VITE_API_URL: https://api.example.com
           VITE_WS_URL: wss://api.example.com
         run: bun run build
+
+  # ── Deploy ──────────────────────────────────────────────────────────────────
+  # Runs only after both check jobs pass, and only for pushes to main — a pull
+  # request should be tested but never released.
+  deploy:
+    name: Deploy to VPS
+    needs: [test, frontend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Trigger Coolify deploy
+        env:
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+        run: |
+          if [ -z "$COOLIFY_TOKEN" ]; then
+            echo "COOLIFY_TOKEN is not set — add it under Settings → Secrets → Actions."
+            exit 1
+          fi
+
+          # -f makes curl exit non-zero on a 4xx/5xx, so a rejected token or a
+          # wrong uuid fails the job instead of passing silently.
+          curl -fsS -X GET \
+            -H "Authorization: Bearer $COOLIFY_TOKEN" \
+            "http://148.230.92.247:8000/api/v1/deploy?uuid=uiadowsniuznipz64wxyxre2&force=false"
+
+          echo ""
+          echo "Deploy queued. Follow it in Coolify → Deployments."
