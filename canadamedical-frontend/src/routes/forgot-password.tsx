@@ -7,7 +7,7 @@ import { FloatingInput } from "@/components/site/Form";
 import { api, apiError } from "@/lib/api";
 
 export const Route = createFileRoute("/forgot-password")({
-  head: () => ({ meta: [{ title: "Reset Password — CandianMdJobs" }] }),
+  head: () => ({ meta: [{ title: "Reset Password — CanadianMdJobs" }] }),
   component: ForgotPasswordPage,
 });
 
@@ -37,7 +37,7 @@ function ForgotPasswordPage() {
       bullets={[
         "Encrypted link sent to your inbox",
         "Single-use, expires in 1 hour",
-        "Need help? hello@CandianMdJobs.ca",
+        "Need help? hello@CanadianMdJobs.ca",
       ]}
       footerNote={
         <>

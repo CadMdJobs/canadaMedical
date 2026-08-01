@@ -58,7 +58,7 @@ export function FeaturedRecruiters() {
               Hospitals &amp; clinics hiring now
             </h2>
             <p className="mt-2 max-w-2xl text-sm text-slate-500">
-              Canada's leading healthcare organisations are actively recruiting through CandianMdJobs.
+              Canada's leading healthcare organisations are actively recruiting through CanadianMdJobs.
             </p>
           </div>
           <Link to="/jobs" className="group inline-flex items-center gap-1 text-sm font-semibold text-slate-600 hover:text-[#1a6fd4] shrink-0">

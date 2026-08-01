@@ -20,7 +20,7 @@ import { Logo } from "@/components/site/Logo";
 import { NotificationBell } from "@/components/site/NotificationBell";
 
 export const Route = createFileRoute("/_authenticated/dashboard/physician")({
-  head: () => ({ meta: [{ title: "Physician Dashboard — CandianMdJobs" }] }),
+  head: () => ({ meta: [{ title: "Physician Dashboard — CanadianMdJobs" }] }),
   validateSearch: (s: Record<string, unknown>): { tab?: string; app?: string } => ({
     tab: typeof s.tab === "string" ? s.tab : undefined,
     app: typeof s.app === "string" ? s.app : undefined,
@@ -616,8 +616,8 @@ function ApplicationCard({
       link.href = url;
       const disposition = response.headers["content-disposition"] as string | undefined;
       const filename = disposition
-        ? disposition.split("filename=")[1]?.replace(/"/g, "") ?? `CandianMdJobs_Job_${app.job_id}.pdf`
-        : `CandianMdJobs_Job_${app.job_id}.pdf`;
+        ? disposition.split("filename=")[1]?.replace(/"/g, "") ?? `CanadianMdJobs_Job_${app.job_id}.pdf`
+        : `CanadianMdJobs_Job_${app.job_id}.pdf`;
       link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();

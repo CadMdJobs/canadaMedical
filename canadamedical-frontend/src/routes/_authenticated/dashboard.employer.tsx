@@ -24,7 +24,7 @@ import { Logo } from "@/components/site/Logo";
 import { NotificationBell } from "@/components/site/NotificationBell";
 
 export const Route = createFileRoute("/_authenticated/dashboard/employer")({
-  head: () => ({ meta: [{ title: "Employer Dashboard — CandianMdJobs" }] }),
+  head: () => ({ meta: [{ title: "Employer Dashboard — CanadianMdJobs" }] }),
   validateSearch: (s: Record<string, unknown>): { subscription?: string; session_id?: string; tab?: string; enterprise?: string } => ({
     subscription: typeof s.subscription === "string" ? s.subscription : undefined,
     session_id: typeof s.session_id === "string" ? s.session_id : undefined,
@@ -3889,7 +3889,7 @@ function BillingHistory({ subscription }: { subscription: UserSubscription | nul
       <!DOCTYPE html>
       <html>
         <head>
-          <title>Billing Statement — CandianMdJobs</title>
+          <title>Billing Statement — CanadianMdJobs</title>
           <meta charset="utf-8" />
           <style>
             * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -3924,7 +3924,7 @@ function BillingHistory({ subscription }: { subscription: UserSubscription | nul
         </head>
         <body>
           <div class="header">
-            <h1>CandianMdJobs</h1>
+            <h1>CanadianMdJobs</h1>
             <p>Official Billing Statement</p>
             <div class="meta">
               <div><span>Account: </span><strong>${user?.email ?? ""}</strong></div>
@@ -3986,7 +3986,7 @@ function BillingHistory({ subscription }: { subscription: UserSubscription | nul
           </table>
 
           <div class="footer">
-            <p>CandianMdJobs &nbsp;·&nbsp; This document serves as an official billing record.</p>
+            <p>CanadianMdJobs &nbsp;·&nbsp; This document serves as an official billing record.</p>
             <p>Generated on ${format(new Date(), "MMMM d, yyyy 'at' h:mm a")}</p>
           </div>
         </body>

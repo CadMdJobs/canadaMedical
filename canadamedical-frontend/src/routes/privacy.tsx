@@ -4,8 +4,8 @@ import { PageHeader } from "@/components/site/PageHeader";
 export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
-      { title: "Privacy Policy — CandianMdJobs" },
-      { name: "description", content: "How CandianMdJobs collects, uses, and protects your personal information under PIPEDA and provincial law." },
+      { title: "Privacy Policy — CanadianMdJobs" },
+      { name: "description", content: "How CanadianMdJobs collects, uses, and protects your personal information under PIPEDA and provincial law." },
     ],
   }),
   component: PrivacyPage,
@@ -17,7 +17,7 @@ function PrivacyPage() {
       <PageHeader eyebrow="Legal" title="Privacy Policy" subtitle="Last updated: May 1, 2026" />
       <article className="prose-policy mx-auto max-w-3xl space-y-6 px-4 py-10 text-foreground/85 sm:py-16 lg:px-8">
         <Section title="1. Overview">
-          CandianMdJobs Inc. ("CandianMdJobs", "we", "us") respects your privacy. This policy explains what information we collect,
+          CanadianMdJobs Inc. ("CanadianMdJobs", "we", "us") respects your privacy. This policy explains what information we collect,
           how we use it, and the choices you have. We comply with the federal <em>Personal Information Protection and Electronic
           Documents Act</em> (PIPEDA) and applicable provincial legislation.
         </Section>
@@ -40,7 +40,7 @@ function PrivacyPage() {
         </Section>
         <Section title="6. Your rights">
           You have the right to access, correct, and delete your personal information, withdraw consent, and lodge a complaint
-          with the Office of the Privacy Commissioner of Canada. Email <a className="text-primary underline" href="mailto:privacy@CandianMdJobs.ca">privacy@CandianMdJobs.ca</a>.
+          with the Office of the Privacy Commissioner of Canada. Email <a className="text-primary underline" href="mailto:privacy@CanadianMdJobs.ca">privacy@CanadianMdJobs.ca</a>.
         </Section>
         <Section title="7. Cookies">
           We use essential cookies for authentication and analytics cookies to understand usage. You can manage cookie preferences

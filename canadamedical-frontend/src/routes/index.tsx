@@ -10,12 +10,12 @@ import {
 } from "lucide-react";
 import { FeaturedRecruiters } from "@/components/site/FeaturedRecruiters";
 import { api } from "@/lib/api";
-import heroDoctorImg from "@/assets/herobanner.jpeg";
+import heroDoctorImg from "@/Images/CanadianMdJobs hero.webp";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "CandianMdJobs — Premier Physician Recruitment Platform" },
+      { title: "CanadianMdJobs — Premier Physician Recruitment Platform" },
       {
         name: "description",
         content:
@@ -785,7 +785,7 @@ function FinalCTA() {
                 Ready to take the next step?
               </h2>
               <p className="mt-2 text-sm text-white/60">
-                Join 6,250+ physicians who've found their ideal position through CandianMdJobs.
+                Join 6,250+ physicians who've found their ideal position through CanadianMdJobs.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3 lg:shrink-0">

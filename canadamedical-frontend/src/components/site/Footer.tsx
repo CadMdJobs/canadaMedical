@@ -118,7 +118,7 @@ export function Footer() {
 
         {/* ── Bottom bar ── */}
         <div className="mt-12 flex flex-col gap-3 border-t border-white/8 pt-6 text-xs text-white/35 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} CandianMdJobs. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} CanadianMdJobs. All rights reserved.</p>
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <Link to="/privacy" className="transition hover:text-white">Privacy Policy</Link>
             <Link to="/terms" className="transition hover:text-white">Terms of Service</Link>

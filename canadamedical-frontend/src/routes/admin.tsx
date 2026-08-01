@@ -143,7 +143,7 @@ function AdminLoginPage() {
             </div>
             <div>
               <h1 className="text-center text-xl font-extrabold text-white">Admin Portal</h1>
-              <p className="mt-1 text-center text-xs text-white/50">CandianMdJobs — Staff only</p>
+              <p className="mt-1 text-center text-xs text-white/50">CanadianMdJobs — Staff only</p>
             </div>
           </div>
 

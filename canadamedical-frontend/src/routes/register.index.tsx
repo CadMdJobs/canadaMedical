@@ -6,8 +6,8 @@ import { AuthLayout } from "@/components/site/AuthLayout";
 export const Route = createFileRoute("/register/")({
   head: () => ({
     meta: [
-      { title: "Create Account — CandianMdJobs" },
-      { name: "description", content: "Join CandianMdJobs as a physician or employer." },
+      { title: "Create Account — CanadianMdJobs" },
+      { name: "description", content: "Join CanadianMdJobs as a physician or employer." },
     ],
   }),
   component: RegisterPicker,
@@ -26,7 +26,7 @@ function RegisterPicker() {
     <AuthLayout
       eyebrow="Get started"
       title="Your career in Canadian medicine starts here."
-      subtitle="Whether you're a physician seeking new opportunities or an employer looking for top talent, CandianMdJobs connects you with the best in Canadian healthcare."
+      subtitle="Whether you're a physician seeking new opportunities or an employer looking for top talent, CanadianMdJobs connects you with the best in Canadian healthcare."
       bullets={[
         "Free for physicians, forever",
         "380+ verified employers across Canada",
@@ -47,7 +47,7 @@ function RegisterPicker() {
             Create account
           </span>
           <h2 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
-            Join CandianMdJobs.
+            Join CanadianMdJobs.
           </h2>
           <p className="text-sm text-muted-foreground">
             Choose your account type to continue.

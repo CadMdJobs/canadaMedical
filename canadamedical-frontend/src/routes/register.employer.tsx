@@ -9,7 +9,7 @@ import { api, apiError } from "@/lib/api";
 export const Route = createFileRoute("/register/employer")({
   head: () => ({
     meta: [
-      { title: "Employer Registration — CandianMdJobs" },
+      { title: "Employer Registration — CanadianMdJobs" },
       { name: "description", content: "Register your hospital, clinic or recruitment firm and start hiring physicians today." },
     ],
   }),
@@ -90,7 +90,7 @@ function EmployerRegister() {
     <AuthLayout
       eyebrow="For Employers"
       title="Hire Canada's most qualified physicians."
-      subtitle="380+ hospitals, clinics, and health authorities use CandianMdJobs to fill critical roles — from rural family practice to subspecialty surgery."
+      subtitle="380+ hospitals, clinics, and health authorities use CanadianMdJobs to fill critical roles — from rural family practice to subspecialty surgery."
       bullets={[
         "Curated physician matches in 48 hours",
         "Transparent pricing — no surprise fees",
@@ -186,7 +186,7 @@ function EmployerRegister() {
               <label className="flex items-start gap-3 rounded-xl border border-border bg-secondary/40 p-4 text-sm text-foreground">
                 <input type="checkbox" required className="mt-1 h-4 w-4 rounded border-border accent-[var(--accent)]" />
                 <span>
-                  I agree to CandianMdJobs's <Link to="/privacy" className="font-semibold text-primary hover:underline">Privacy Policy</Link> and confirm I am authorized to recruit on behalf of this organization.
+                  I agree to CanadianMdJobs's <Link to="/privacy" className="font-semibold text-primary hover:underline">Privacy Policy</Link> and confirm I am authorized to recruit on behalf of this organization.
                 </span>
               </label>
             </div>

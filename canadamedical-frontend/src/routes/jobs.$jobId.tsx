@@ -638,8 +638,8 @@ function JobDetailPage() {
       link.href = url;
       const disposition = response.headers["content-disposition"] as string | undefined;
       const filename = disposition
-        ? disposition.split("filename=")[1]?.replace(/"/g, "") ?? `CandianMdJobs_Job_${jobId}.pdf`
-        : `CandianMdJobs_Job_${jobId}.pdf`;
+        ? disposition.split("filename=")[1]?.replace(/"/g, "") ?? `CanadianMdJobs_Job_${jobId}.pdf`
+        : `CanadianMdJobs_Job_${jobId}.pdf`;
       link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();

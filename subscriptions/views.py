@@ -1082,7 +1082,7 @@ class AdminEnterpriseRequestApproveView(APIView):
                     currency='cad',
                     recurring={'interval': 'month'},
                     product_data={
-                        'name': f"CandianMdJobs Enterprise — {enterprise_request.organization_name}",
+                        'name': f"CanadianMdJobs Enterprise — {enterprise_request.organization_name}",
                     },
                     metadata={
                         'enterprise_request_id': str(enterprise_request.id),

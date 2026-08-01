@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import logoImg from "@/assets/CandianMdJobs Logo.png";
+import logoImg from "@/Images/CanadianMDJobs Logo.webp";
 
 export function Logo({
   inverse = false,
@@ -18,7 +18,7 @@ export function Logo({
     <Link
       to="/"
       className="group inline-flex items-center shrink-0"
-      aria-label="CandianMdJobs home"
+      aria-label="CanadianMdJobs home"
     >
       {/* On dark backgrounds (inverse) wrap in a semi-transparent white pill so
           the coloured logo remains readable */}
@@ -31,7 +31,7 @@ export function Logo({
       >
         <img
           src={logoImg}
-          alt="CandianMdJobs"
+          alt="CanadianMdJobs"
           className={`${heights[size]} w-auto object-contain`}
           draggable={false}
         />

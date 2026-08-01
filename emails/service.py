@@ -6,7 +6,7 @@ from django.core.mail import EmailMultiAlternatives
 logger = logging.getLogger(__name__)
 
 BRAND_COLOR = "#1a6b3c"
-BRAND_NAME  = "CandianMdJobs"
+BRAND_NAME  = "CanadianMdJobs"
 
 
 def _get_api_key():
@@ -447,12 +447,12 @@ def send_offer_accepted_confirmation(physician_user, job_title: str, employer_na
 
 <p style="margin:0 0 20px;color:#374151;font-size:14px;line-height:1.6;">
   The employer has been notified. Expect them to be in touch with onboarding details.
-  Best of luck in your new role — CandianMdJobs is proud to have helped you find it!
+  Best of luck in your new role — CanadianMdJobs is proud to have helped you find it!
 </p>
 {_btn("View My Applications", f"{frontend_url}/dashboard/physician?tab=applications")}
 {_divider()}
 <p style="margin:0;color:#9ca3af;font-size:13px;">
-  Thank you for using CandianMdJobs. We wish you the very best in your new position.
+  Thank you for using CanadianMdJobs. We wish you the very best in your new position.
 </p>
 """
     return _send(
@@ -484,7 +484,7 @@ def send_employer_custom_email(physician_user, employer_name: str, job_title: st
 {_btn("View My Applications", f"{frontend_url}/dashboard")}
 {_divider()}
 <p style="margin:0;color:#9ca3af;font-size:13px;">
-  This message was sent by {employer_name} via CandianMdJobs.
+  This message was sent by {employer_name} via CanadianMdJobs.
 </p>
 """
     return _send(
@@ -532,7 +532,7 @@ def send_enterprise_request_admin_email(admin_email: str, employer_name: str, or
 
 {_btn('Review Request in Admin Dashboard', f'{frontend_url}/admin/enterprise')}
 {_divider()}
-<p style="margin:0;color:#9ca3af;font-size:13px;">This notification was sent automatically by CandianMdJobs.</p>
+<p style="margin:0;color:#9ca3af;font-size:13px;">This notification was sent automatically by CanadianMdJobs.</p>
 """
     return _send(admin_email, f'New Enterprise Plan Request — {org_name}', _base_html('Enterprise Request', body))
 
@@ -581,7 +581,7 @@ def send_custom_plan_payment_link_email(employer_user, payment_link: str, price:
 """
     return _send(
         employer_user.email,
-        'Your CandianMdJobs Custom Plan Payment Link',
+        'Your CanadianMdJobs Custom Plan Payment Link',
         _base_html('Custom Plan Payment', body),
     )
 

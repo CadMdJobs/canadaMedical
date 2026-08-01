@@ -10,7 +10,7 @@ import { SPECIALTIES } from "@/data/jobs";
 export const Route = createFileRoute("/register/physician")({
   head: () => ({
     meta: [
-      { title: "Physician Registration — CandianMdJobs" },
+      { title: "Physician Registration — CanadianMdJobs" },
       { name: "description", content: "Create your physician profile and get matched with premier opportunities across Canada." },
     ],
   }),
@@ -93,7 +93,7 @@ function PhysicianRegister() {
     <AuthLayout
       eyebrow="For Physicians"
       title="Your next chapter starts in Canada."
-      subtitle="Join 4,200+ verified physicians using CandianMdJobs to discover roles in hospitals, clinics, and health authorities — from Vancouver Island to St. John's."
+      subtitle="Join 4,200+ verified physicians using CanadianMdJobs to discover roles in hospitals, clinics, and health authorities — from Vancouver Island to St. John's."
       bullets={[
         "Free for physicians, forever",
         "Direct access to 380+ vetted employers",
@@ -196,7 +196,7 @@ function PhysicianRegister() {
 
               <label className="flex items-start gap-3 rounded-xl border border-border bg-secondary/40 p-4 text-sm text-foreground">
                 <input type="checkbox" required className="mt-1 h-4 w-4 rounded border-border accent-[var(--accent)]" />
-                <span>I confirm I am eligible to work in Canada (Citizen, PR, or eligible work permit). CandianMdJobs can guide international physicians through licensing where required.</span>
+                <span>I confirm I am eligible to work in Canada (Citizen, PR, or eligible work permit). CanadianMdJobs can guide international physicians through licensing where required.</span>
               </label>
             </div>
           )}

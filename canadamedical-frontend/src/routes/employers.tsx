@@ -13,8 +13,8 @@ import { useAuthStore } from "@/stores/auth";
 export const Route = createFileRoute("/employers")({
   head: () => ({
     meta: [
-      { title: "For Employers — Hire Physicians in Canada | CandianMdJobs" },
-      { name: "description", content: "Reach 9,000+ verified Canadian physicians. Post roles, screen candidates, and hire faster with CandianMdJobs." },
+      { title: "For Employers — Hire Physicians in Canada | CanadianMdJobs" },
+      { name: "description", content: "Reach 9,000+ verified Canadian physicians. Post roles, screen candidates, and hire faster with CanadianMdJobs." },
     ],
   }),
   validateSearch: (s: Record<string, unknown>): { subscription?: string } => ({

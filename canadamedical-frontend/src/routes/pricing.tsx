@@ -12,7 +12,7 @@ import { useAuthStore } from "@/stores/auth";
 export const Route = createFileRoute("/pricing")({
   head: () => ({
     meta: [
-      { title: "Pricing — CandianMdJobs" },
+      { title: "Pricing — CanadianMdJobs" },
       { name: "description", content: "Simple, transparent pricing for Canadian physician recruitment. No hidden fees." },
     ],
   }),
@@ -374,7 +374,7 @@ function PricingPage() {
       {/* ── Bottom note ────────────────────────────────────────────────────── */}
       <div className="border-t border-slate-200 py-10 text-center">
         <p className="text-sm text-slate-500">
-          Physicians always use CandianMdJobs for free — no subscription needed.{" "}
+          Physicians always use CanadianMdJobs for free — no subscription needed.{" "}
           <Link to="/register/physician" className="font-semibold text-[#1a6fd4] hover:underline">
             Create a free physician profile →
           </Link>

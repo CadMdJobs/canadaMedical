@@ -10,6 +10,8 @@ import {
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+// ?url so Vite emits a hashed asset path rather than inlining the image
+import faviconUrl from "@/Images/CanadianMDJobs FavIcon.webp?url";
 import { Header } from "@/components/site/Header";
 import { Footer } from "@/components/site/Footer";
 import { Toaster } from "react-hot-toast";
@@ -77,19 +79,24 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "CandianMdJobs — Premier Physician Recruitment" },
+      { title: "CanadianMdJobs — Premier Physician Recruitment" },
       { name: "description", content: "Discover physician careers across Canada. Browse jobs by specialty and province, register your profile, and get matched with leading employers." },
-      { name: "author", content: "CandianMdJobs" },
-      { property: "og:title", content: "CandianMdJobs — Premier Physician Recruitment" },
+      { name: "author", content: "CanadianMdJobs" },
+      { property: "og:title", content: "CanadianMdJobs — Premier Physician Recruitment" },
       { property: "og:description", content: "Your next medical career begins here. Explore premier physician opportunities across Canada." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@CandianMdJobs" },
+      { name: "twitter:site", content: "@CanadianMdJobs" },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
+      },
+      {
+        rel: "icon",
+        type: "image/webp",
+        href: faviconUrl,
       },
     ],
   }),

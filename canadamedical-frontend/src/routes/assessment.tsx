@@ -16,7 +16,7 @@ import { SPECIALTIES, PROVINCES } from "@/data/jobs";
 export const Route = createFileRoute("/assessment")({
   head: () => ({
     meta: [
-      { title: "Free Career Assessment — CandianMdJobs" },
+      { title: "Free Career Assessment — CanadianMdJobs" },
       { name: "description", content: "Get a personalized career roadmap from our recruiters. Free 5-minute assessment." },
     ],
   }),
@@ -523,7 +523,7 @@ function AssessmentPage() {
                 <div className="rounded-2xl border border-slate-200 bg-[#f8faff] p-5">
                   <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">Ready to submit</p>
                   <p className="text-sm text-slate-500">
-                    By submitting, you agree that a CandianMdJobs recruiter may contact you via the email and phone provided. We never share your data with third parties.
+                    By submitting, you agree that a CanadianMdJobs recruiter may contact you via the email and phone provided. We never share your data with third parties.
                   </p>
                 </div>
               </div>

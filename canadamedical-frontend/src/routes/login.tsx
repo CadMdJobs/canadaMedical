@@ -8,7 +8,7 @@ import { api, apiError } from "@/lib/api";
 import { useAuthStore, type AuthUser } from "@/stores/auth";
 
 export const Route = createFileRoute("/login")({
-  head: () => ({ meta: [{ title: "Log In — CandianMdJobs" }] }),
+  head: () => ({ meta: [{ title: "Log In — CanadianMdJobs" }] }),
   validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
     redirect: typeof search.redirect === "string" ? search.redirect : undefined,
   }),
@@ -83,7 +83,7 @@ function LoginPage() {
         <header className="space-y-2">
           <span className="text-xs font-semibold uppercase tracking-[0.18em] text-accent">Sign in</span>
           <h2 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
-            Welcome back to CandianMdJobs.
+            Welcome back to CanadianMdJobs.
           </h2>
           <p className="text-sm text-muted-foreground">Choose your account type to continue.</p>
         </header>
@@ -170,7 +170,7 @@ function LoginPage() {
           </button>
 
           <p className="pt-2 text-center text-sm text-muted-foreground">
-            New to CandianMdJobs?{" "}
+            New to CanadianMdJobs?{" "}
             <Link
               to="/register"
               className="font-semibold text-primary hover:text-accent hover:underline"

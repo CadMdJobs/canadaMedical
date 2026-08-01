@@ -13,7 +13,7 @@ import { SPECIALTIES as FALLBACK_SPECIALTIES, PROVINCES as FALLBACK_PROVINCES, J
 export const Route = createFileRoute("/jobs/")({
   head: () => ({
     meta: [
-      { title: "Find a Physician Job in Canada — CandianMdJobs" },
+      { title: "Find a Physician Job in Canada — CanadianMdJobs" },
       { name: "description", content: "Search 1,200+ physician jobs across Canada by specialty, province, and employer type." },
     ],
   }),

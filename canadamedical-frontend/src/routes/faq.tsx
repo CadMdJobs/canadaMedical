@@ -5,7 +5,7 @@ import { Plus, Minus, Search, Users, Briefcase, ShieldCheck, Headphones, Phone }
 import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/faq")({
-  head: () => ({ meta: [{ title: "FAQ — CandianMdJobs" }] }),
+  head: () => ({ meta: [{ title: "FAQ — CanadianMdJobs" }] }),
   component: FAQPage,
 });
 

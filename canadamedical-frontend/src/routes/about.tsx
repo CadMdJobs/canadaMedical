@@ -12,7 +12,7 @@ import { api } from "@/lib/api";
 export const Route = createFileRoute("/about")({
   head: () => ({
     meta: [
-      { title: "About Us — CandianMdJobs" },
+      { title: "About Us — CanadianMdJobs" },
       { name: "description", content: "Canada's dedicated physician recruitment platform — built by healthcare professionals, for healthcare professionals." },
     ],
   }),
@@ -89,7 +89,7 @@ const CORE_VALUES = [
 ];
 
 const TIMELINE = [
-  { year: "2016", title: "CandianMdJobs Launched",         desc: "Started with a small team of healthcare professionals who understood the challenges physicians face in finding the right opportunities." },
+  { year: "2016", title: "CanadianMdJobs Launched",         desc: "Started with a small team of healthcare professionals who understood the challenges physicians face in finding the right opportunities." },
   { year: "2018", title: "Nationwide Expansion",           desc: "Expanded our reach to all 13 provinces and territories, partnering with healthcare organizations across Canada." },
   { year: "2020", title: "1,500+ Employer Partners",       desc: "Built a network of over 1,500 verified healthcare employers across all specialties and care settings." },
   { year: "2023", title: "Free Career Assessment Launched",desc: "Introduced our free physician career assessment to help physicians discover their ideal career paths." },
@@ -199,13 +199,13 @@ function OurStorySection() {
               Connecting Canada's Medical Talent
             </h2>
             <p className="mt-5 text-sm leading-relaxed text-slate-500">
-              CandianMdJobs.com was founded with a simple mission: to simplify physician recruitment across Canada and create meaningful connections between talented physicians and outstanding healthcare organizations.
+              CanadianMdJobs.com was founded with a simple mission: to simplify physician recruitment across Canada and create meaningful connections between talented physicians and outstanding healthcare organizations.
             </p>
             <p className="mt-4 text-sm leading-relaxed text-slate-500">
               We recognized a gap in the Canadian healthcare recruitment market — physicians and employers needed a dedicated, trustworthy platform that truly understands the unique landscape of Canadian medicine. From urban academic medical centres to remote northern clinics, every region of Canada deserves access to exceptional physician talent.
             </p>
             <p className="mt-4 text-sm leading-relaxed text-slate-500">
-              Today, CandianMdJobs is helping to transform how physicians and healthcare organizations connect — across 13 provinces and territories, featuring{" "}
+              Today, CanadianMdJobs is helping to transform how physicians and healthcare organizations connect — across 13 provinces and territories, featuring{" "}
               <strong className="font-semibold text-[#0f1f3d]">1,500+ active positions</strong> and{" "}
               <strong className="font-semibold text-[#0f1f3d]">25+ employer partners</strong>.
             </p>
