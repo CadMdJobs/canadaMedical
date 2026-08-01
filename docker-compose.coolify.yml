@@ -151,7 +151,7 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U ${DB_USER}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U $${DB_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -248,6 +248,11 @@ services:
     volumes:
       - backend_logs:/app/logs
     command: ["beat"]
+    # Beat is a scheduler with no socket to probe, but the image carries a
+    # HEALTHCHECK that curls localhost:8000 — nothing listens there in this
+    # container, so it would sit permanently unhealthy. Disable, don't fake it.
+    healthcheck:
+      disable: true
     depends_on:
       backend:
         condition: service_healthy
@@ -269,10 +274,13 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      # Shell form with -O- behaves the same under busybox and GNU wget; the
+      # exec form left the container unhealthy while serving traffic fine.
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 15s
     networks:
       - proxy
     logging:
