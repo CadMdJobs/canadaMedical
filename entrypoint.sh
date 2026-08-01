@@ -45,6 +45,23 @@ except Exception:
 " 2>/dev/null; do
         i=$((i+1))
         if [ "$i" -ge "$MAX" ]; then
+            # Print why, rather than just that it timed out. The connection
+            # error is swallowed above so the loop stays quiet while retrying,
+            # which otherwise leaves "did not become available" as the only
+            # clue — and that points at the wrong container when the real
+            # fault is, say, an auth mismatch inside pgBouncer.
+            log "Last connection error was:"
+            python -c "
+import psycopg2, os
+try:
+    psycopg2.connect(
+        dbname=os.environ['DB_NAME'], user=os.environ['DB_USER'],
+        password=os.environ['DB_PASSWORD'], host=os.environ['DB_HOST'],
+        port=os.environ.get('DB_PORT', '5432'), connect_timeout=3,
+    )
+except Exception as exc:
+    print(f'  {type(exc).__name__}: {exc}')
+" || true
             die "PostgreSQL did not become available after ${MAX} seconds."
         fi
         sleep 1
