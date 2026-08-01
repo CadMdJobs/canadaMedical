@@ -97,7 +97,7 @@ services:
   # vars automatically and removes the "upload a secret file to the VPS" step,
   # which Coolify has no clean way to do.
   pgbouncer:
-    image: edoburu/pgbouncer:1.23.1
+    image: edoburu/pgbouncer:v1.25.2-p0
     restart: unless-stopped
     environment:
       DB_HOST: db

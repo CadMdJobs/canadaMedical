@@ -97,7 +97,7 @@ services:
 
   # ── pgBouncer — connection pooler ────────────────────────────────────────────
   pgbouncer:
-    image: edoburu/pgbouncer:1.23.1
+    image: edoburu/pgbouncer:v1.25.2-p0
     restart: unless-stopped
     environment:
       DB_HOST: db
