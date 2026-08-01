@@ -150,13 +150,18 @@ services:
       RESERVE_POOL_SIZE: 5
       SERVER_IDLE_TIMEOUT: 600
       SERVER_LIFETIME: 3600
-      AUTH_TYPE: md5
+      # postgres:16 hashes passwords with scram-sha-256 by default, so asking
+      # pgBouncer for md5 makes every login fail against it. The healthcheck
+      # below could not catch that: pg_isready only proves the port answers,
+      # not that credentials work, which is why pgbouncer reported healthy
+      # while the backend timed out connecting through it for 60s at a time.
+      AUTH_TYPE: scram-sha-256
       IGNORE_STARTUP_PARAMETERS: extra_float_digits,options
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U ${DB_USER}"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U $${DB_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
