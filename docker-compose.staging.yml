@@ -70,6 +70,13 @@ x-backend-common: &backend-common
 services:
 
   # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  # Tuning is passed as -c flags rather than by mounting
+  # deploy/postgres/postgresql.conf. Coolify copies the compose file into
+  # /artifacts/<id>/ before running it, and a relative bind mount that does not
+  # resolve there is silently created as an empty *directory*, which makes
+  # postgres exit immediately — the container died about a second after start,
+  # well inside its 30s healthcheck grace period, so it was never a healthcheck
+  # problem. Flags carry the same settings with nothing to resolve.
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -79,8 +86,40 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./deploy/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
-    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    command:
+      - postgres
+      - -c
+      - max_connections=50
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - work_mem=10MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - effective_cache_size=768MB
+      - -c
+      - wal_buffers=8MB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - max_wal_size=1GB
+      - -c
+      - min_wal_size=256MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - max_worker_processes=2
+      - -c
+      - max_parallel_workers=2
+      - -c
+      - max_parallel_workers_per_gather=1
+      - -c
+      - log_min_duration_statement=500
+      - -c
+      - timezone=America/Toronto
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
@@ -126,15 +165,35 @@ services:
       - backend
 
   # ── Redis ────────────────────────────────────────────────────────────────────
+  # Config passed as flags for the same reason as the db service above: the
+  # mounted redis.conf would be the next thing to fail once postgres started.
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: >
-      redis-server /usr/local/etc/redis/redis.conf
-      --requirepass ${REDIS_PASSWORD}
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --databases
+      - "2"
+      - --save
+      - "900 1"
+      - --tcp-keepalive
+      - "60"
+      - --timeout
+      - "300"
+      - --loglevel
+      - notice
     volumes:
       - redis_data:/data
-      - ./deploy/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
