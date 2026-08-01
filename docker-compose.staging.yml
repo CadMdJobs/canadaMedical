@@ -279,7 +279,10 @@ services:
         VITE_WS_URL: ${VITE_WS_URL}
     restart: unless-stopped
     ports:
-      - "80:80"
+      # Host port 3000, not 80: Coolify's own Traefik proxy already holds 80 on
+      # this VPS, so binding it here fails with "port is already allocated".
+      # Nginx still listens on 80 inside the container.
+      - "3000:80"
     depends_on:
       backend:
         condition: service_healthy
