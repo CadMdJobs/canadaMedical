@@ -1,11 +1,12 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# Staging / no-domain Docker Compose — CanadianMedProject
+# Staging / no-domain Docker Compose — CanadianMedProject backend
 #
-# For running on a bare VPS IP before a domain exists. Everything is served
-# over plain HTTP on published ports:
+# For running on a bare VPS IP before a domain exists. Served over plain HTTP:
 #
-#   http://VPS_IP        → frontend (React SPA)
-#   http://VPS_IP:8000   → backend  (Django API + WebSocket)
+#   http://VPS_IP:8001   → backend (Django API + WebSocket)
+#
+# The frontend deploys separately from its own repository; this file covers the
+# API, workers and datastores only.
 #
 # Why this file exists separately from docker-compose.coolify.yml:
 #   Traefik routes by hostname. With no domain there is no hostname to match,
@@ -197,35 +198,10 @@ services:
       backend:
         condition: service_healthy
 
-  # ── React / Nginx (frontend) ─────────────────────────────────────────────────
-  # Served on port 80 → http://VPS_IP
-  # VITE_* are build args baked into the bundle, so they must point at the same
-  # scheme the browser uses (http://VPS_IP:8000, not https://).
-  frontend:
-    build:
-      context: ./canadamedical-frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: ${VITE_API_URL}
-        VITE_WS_URL: ${VITE_WS_URL}
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    networks:
-      - backend
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+# The frontend is deliberately absent from this file. It lives in its own
+# repository (CadMdJobs/canadaMedicalFrontend) and deploys as a separate Coolify
+# resource, so that a UI change does not restart the API, Celery and the
+# database along with it. See deploy/STAGING-NO-DOMAIN.md.
 
 # ─────────────────────────────────────────────────────────────────────────────
 networks:

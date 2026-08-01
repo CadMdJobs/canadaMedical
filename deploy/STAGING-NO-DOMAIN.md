@@ -8,7 +8,16 @@ http://148.230.92.247        → frontend (React)
 http://148.230.92.247:8001   → backend  (Django API + WebSocket)
 ```
 
-Compose file: `docker-compose.staging.yml`
+**Two Coolify resources, one per repository:**
+
+| Resource | Repository | Compose file |
+| -------- | ---------- | ------------ |
+| backend  | `CadMdJobs/canadaMedical` | `/docker-compose.staging.yml` |
+| frontend | `CadMdJobs/canadaMedicalFrontend` | `/docker-compose.staging.yml` |
+
+They are split so a UI change redeploys the SPA alone, without restarting the
+API, Celery workers and the database. The backend compose in this repo contains
+no `frontend` service for that reason.
 
 When the domain arrives, switch to `docker-compose.coolify.yml` — see
 `deploy/COOLIFY.md` and the migration notes at the bottom of this file.
@@ -28,15 +37,26 @@ on the VPS speaking HTTP to each other, which is consistent and works.
 
 ---
 
-## 1. Create the resource in Coolify
+## 1. Create the resources in Coolify
 
-Coolify → Project → **New Resource → Docker Compose**
+Two resources, created the same way — Coolify → Project → **New Resource →
+Public Repository**, then set **Build Pack: Docker Compose**:
 
-- Source: this Git repository, branch `main`
-- Compose file path: `docker-compose.staging.yml`
-- Build server: the VPS itself
-- **Domains: leave every service blank.** There is no hostname to route, so the
-  containers publish ports directly rather than going through Traefik.
+**Backend**
+- Repository: `https://github.com/CadMdJobs/canadaMedical`
+- Compose file path: `/docker-compose.staging.yml`
+
+**Frontend**
+- Repository: `https://github.com/CadMdJobs/canadaMedicalFrontend`
+- Compose file path: `/docker-compose.staging.yml`
+
+For both: branch `main`, build server `localhost`, and **leave every Domain
+field blank**. There is no hostname to route, so the containers publish ports
+directly rather than going through Traefik. Generating a domain would give the
+service an HTTPS URL, which then cannot call the plain-HTTP API.
+
+The frontend repo must be **public** for this to work. A private one needs a
+GitHub App configured under Coolify → Sources first.
 
 ---
 
@@ -113,9 +133,10 @@ RESEND_FROM_EMAIL=
 RESEND_TEST_EMAIL=
 ```
 
-### Build variables
+### Frontend variables
 
-Mark these two as **Build Variable** in Coolify, not ordinary env vars:
+These two go on the **frontend** resource, not the backend one, and must be
+marked **Available at Buildtime** in Coolify:
 
 ```ini
 VITE_API_URL=http://148.230.92.247:8001
