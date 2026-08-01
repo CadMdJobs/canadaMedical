@@ -84,14 +84,25 @@ run_web_startup() {
     log "Running database migrations ..."
     python manage.py migrate --noinput
 
+    # No --clear: wiping and rewriting every file on each boot is slow and buys
+    # nothing here, since the volume is only ever written by this step.
     log "Collecting static files ..."
-    python manage.py collectstatic --noinput --clear
+    python manage.py collectstatic --noinput
 
     log "Seeding subscription plans ..."
-    python manage.py setup_plans || log "setup_plans failed (non-fatal, may already exist)"
+    timeout 60 python manage.py setup_plans || log "setup_plans failed (non-fatal, may already exist)"
 
-    log "Syncing Stripe plans ..."
-    python manage.py create_stripe_plans || log "create_stripe_plans failed (non-fatal — check STRIPE_SECRET_KEY)"
+    # Skipped entirely without a key: the command would otherwise reach out to
+    # the Stripe API and can hang there rather than failing, and a hang here
+    # blocks the server from ever starting — `||` only catches a non-zero exit.
+    # The timeout is a second line of defence for the same reason.
+    if [ -n "${STRIPE_SECRET_KEY:-}" ]; then
+        log "Syncing Stripe plans ..."
+        timeout 120 python manage.py create_stripe_plans \
+            || log "create_stripe_plans failed (non-fatal — check STRIPE_SECRET_KEY)"
+    else
+        log "STRIPE_SECRET_KEY not set — skipping Stripe plan sync."
+    fi
 }
 
 # ── Celery healthcheck file (used by Docker HEALTHCHECK for workers) ──────────
