@@ -211,14 +211,81 @@ resource in Coolify — set up backups before the platform carries real data.
 kept for reference. Deploying both against the same VPS would collide on ports
 and volumes — pick one.
 
-### CI
+### CI and auto-deploy
 
-`.github/workflows/ci.yml` runs checks only — Django migrations plus a frontend
-production build — and requires no secrets. It does not deploy; Coolify does
-that on its own when main changes. The old `ci-cd.yml`, which built images to
-GHCR and deployed over SSH, was removed when the platform moved to Coolify: two
-systems deploying to the same VPS would fight, and the GHCR images were never
-pulled by anything.
+`.github/workflows/ci.yml` runs two check jobs — Django migrations plus a
+frontend production build — and then a `deploy` job that calls Coolify's API.
+The deploy job runs only on pushes to `main` and only if both checks pass, so a
+failing test stops the release.
+
+Coolify's *own* GitHub webhook is deliberately disabled (repo → Settings →
+Webhooks, Active unticked). Re-enabling it makes pushes deploy directly and the
+CI gate becomes decorative.
+
+The old `ci-cd.yml`, which built images to GHCR and deployed over SSH, was
+removed when the platform moved to Coolify: two systems deploying to the same
+VPS would fight, and the GHCR images were never pulled by anything.
 
 The frontend job runs `bun run build` but not `bun run lint` — see the comment
 in the workflow for why.
+
+**Setup the deploy job needs:**
+
+- Coolify → Settings → Advanced → **API Access** enabled, **Allowed IPs empty**.
+  GitHub runners have no fixed IP — GitHub publishes over 5,600 IPv4 ranges for
+  Actions, so an allowlist is not maintainable. The token is the access control.
+- Coolify → Keys & Tokens → API token scoped to **`deploy`** only, never
+  `root`/`write`, with a long expiry. A 30-day default silently stops deploys.
+- Token stored as the GitHub secret `COOLIFY_TOKEN`.
+
+**The workflow reaches Coolify at `https://deploy.canadianmdjobs.com`, not at
+`http://IP:8000`.** The bare-IP form timed out from GitHub's runners
+(`curl (28)`, ~132s) even with UFW inactive and Coolify's allowlist empty — the
+same URL worked fine from a home connection and had worked from Actions days
+earlier. Something between GitHub's network and the host filters port 8000;
+Hostinger's network-level firewall, which is separate from UFW, is the likely
+culprit. Port 443 is not subject to that, and it keeps the dashboard off the
+open internet.
+
+For this to work, the Coolify instance itself needs that hostname: Settings →
+General → **Instance Domain** = `https://deploy.canadianmdjobs.com`, plus the
+matching A record (see `deploy/CLIENT-DNS-INSTRUCTIONS.md`). Setting the
+instance domain also moves the dashboard login off plain HTTP.
+
+### A 504 after switching compose files means Traefik, not the app
+
+After the staging → coolify compose switch, `frontend` returned 504 for half an
+hour while `backend` on the same network served fine. Everything internal
+checked out: container healthy, nginx serving, correct router labels, and
+`docker exec coolify-proxy wget -O- http://<frontend-container>/healthz`
+returned `ok`.
+
+The cause was a stale route in Traefik — the container had been recreated with
+a new IP and the proxy was still holding the old one. The fix is one command:
+
+```bash
+docker restart coolify-proxy
+```
+
+Try this first whenever routing misbehaves after a redeploy. It reloads the
+proxy only; application containers are untouched, and the brief interruption
+covers every domain for a few seconds.
+
+### Firewall
+
+UFW is currently **inactive** on this VPS, so nothing is filtered at the host.
+If it is ever enabled, only SSH, HTTP and HTTPS should be open:
+
+```bash
+sudo ufw allow 22/tcp   comment "SSH"
+sudo ufw allow 80/tcp   comment "HTTP (redirects to HTTPS)"
+sudo ufw allow 443/tcp  comment "HTTPS"
+sudo ufw enable
+```
+
+Add the SSH rule *before* `enable`, and keep Coolify's browser terminal open as
+a second way in — an incomplete ruleset locks you out of the server.
+
+Note that the staging ports (8001 for the API, 3000 for the frontend) are gone
+on their own: `docker-compose.coolify.yml` uses `expose` rather than `ports`, so
+those services are reachable only through Traefik.

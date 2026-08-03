@@ -142,11 +142,23 @@ jobs:
             exit 1
           fi
 
+          # Reached over 443 on a hostname rather than http://IP:8000. The bare
+          # IP form timed out from GitHub's runners even with UFW inactive and
+          # Coolify's own allowlist empty — something between the two networks
+          # drops the packets, and port 8000 is the kind of port that gets
+          # filtered. 443 is never blocked, and it keeps the dashboard off the
+          # open internet.
+          #
+          # Requires an A record for deploy.canadianmdjobs.com pointing at the
+          # VPS, plus that domain set on the Coolify instance itself
+          # (Settings → General → Instance Domain). Until both exist this step
+          # fails with a DNS or TLS error — see deploy/COOLIFY.md.
+          #
           # -f makes curl exit non-zero on a 4xx/5xx, so a rejected token or a
           # wrong uuid fails the job instead of passing silently.
           curl -fsS -X GET \
             -H "Authorization: Bearer $COOLIFY_TOKEN" \
-            "http://148.230.92.247:8000/api/v1/deploy?uuid=uiadowsniuznipz64wxyxre2&force=false"
+            "https://deploy.canadianmdjobs.com/api/v1/deploy?uuid=uiadowsniuznipz64wxyxre2&force=false"
 
           echo ""
           echo "Deploy queued. Follow it in Coolify → Deployments."

@@ -7,9 +7,9 @@ to anything else: DNS records only say "this name points at this server".
 The domain is `canadianmdjobs.com`. Confirm the server IP is still
 `148.230.92.247` before sending.
 
-> **Status: the three A records below were added on 2026-08-03 and verified
-> resolving.** Keep this file for the SPF/DKIM round described at the bottom —
-> Resend needs a second set of records from the same owner.
+> **Status: `@`, `www` and `api` were added on 2026-08-03 and the site is live
+> on HTTPS.** Still outstanding: the `deploy` record in the table below, and
+> the SPF/DKIM round described at the bottom.
 
 ---
 
@@ -19,16 +19,25 @@ Log in wherever the domain was purchased — GoDaddy, Namecheap, Hostinger,
 Cloudflare, or similar. Find the section called **DNS**, **DNS Management**,
 **DNS Records**, or **Manage DNS**.
 
-Add the three records below. If a record with the same Name already exists,
-edit it rather than adding a second one.
+Add the records below. If a record with the same Name already exists, edit it
+rather than adding a second one.
 
-| Type | Name / Host | Value / Points to | TTL       |
-| ---- | ----------- | ----------------- | --------- |
-| A    | `@`         | `148.230.92.247`  | Automatic |
-| A    | `www`       | `148.230.92.247`  | Automatic |
-| A    | `api`       | `148.230.92.247`  | Automatic |
+| Type | Name / Host | Value / Points to | TTL       | Status      |
+| ---- | ----------- | ----------------- | --------- | ----------- |
+| A    | `@`         | `148.230.92.247`  | Automatic | done        |
+| A    | `www`       | `148.230.92.247`  | Automatic | done        |
+| A    | `api`       | `148.230.92.247`  | Automatic | done        |
+| A    | `deploy`    | `148.230.92.247`  | Automatic | **needed**  |
 
-That is it. Save, and send back a screenshot of the record list.
+`deploy` is the only one left. It gives the release tooling a secure address to
+talk to instead of a raw IP; nothing on it is public-facing.
+
+Save, and send back a screenshot of the record list.
+
+> If a `deploy` entry already exists pointing somewhere else (some registrars
+> add catch-all records automatically), edit that one rather than adding a
+> second — two records with the same name will send traffic to the wrong place
+> half the time.
 
 ---
 
