@@ -4,8 +4,12 @@ Hand this to whoever controls the domain. It assumes no prior DNS knowledge and
 asks for four records and one screenshot back. Nothing here gives away access
 to anything else: DNS records only say "this name points at this server".
 
-Replace `YOURDOMAIN.com` with the actual domain, and confirm the server IP is
-still `148.230.92.247` before sending.
+The domain is `canadianmdjobs.com`. Confirm the server IP is still
+`148.230.92.247` before sending.
+
+> **Status: the three A records below were added on 2026-08-03 and verified
+> resolving.** Keep this file for the SPF/DKIM round described at the bottom —
+> Resend needs a second set of records from the same owner.
 
 ---
 
@@ -31,10 +35,10 @@ That is it. Save, and send back a screenshot of the record list.
 ## Notes that prevent the usual mistakes
 
 **In the Name field, enter only what the table says.** Type `api`, not
-`api.YOURDOMAIN.com`. The control panel adds the domain part itself. Some
+`api.canadianmdjobs.com`. The control panel adds the domain part itself. Some
 panels show the full name back to you after saving — that is correct.
 
-**`@` means the domain on its own** (`YOURDOMAIN.com` with nothing in front).
+**`@` means the domain on its own** (`canadianmdjobs.com` with nothing in front).
 A few panels label this "root", "apex", or want the field left blank instead.
 
 **Changes take time to spread** — usually 5–30 minutes, occasionally a few

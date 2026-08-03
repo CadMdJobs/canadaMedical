@@ -213,11 +213,13 @@ CV can be read by anything on the network path. Treat it as a demo:
 2. In Coolify, change the compose file to `docker-compose.coolify.yml` and set
    the domains on `frontend` and `backend`.
 3. Update the environment:
-   - `ALLOWED_HOSTS=api.YOUR_DOMAIN,YOUR_DOMAIN,www.YOUR_DOMAIN`
-   - `FRONTEND_URL=https://YOUR_DOMAIN`
-   - `SECURE_SSL=True`
-   - `VITE_API_URL=https://api.YOUR_DOMAIN` and
-     `VITE_WS_URL=wss://api.YOUR_DOMAIN` (rebuild required)
+   - `ALLOWED_HOSTS=api.canadianmdjobs.com,canadianmdjobs.com,www.canadianmdjobs.com`
+   - `FRONTEND_URL=https://canadianmdjobs.com`
+   - `SECURE_SSL=True` — this also turns on `SECURE_PROXY_SSL_HEADER`, which
+     Traefik needs. Without it Django cannot tell the request arrived over TLS
+     and `SECURE_SSL_REDIRECT` bounces the browser in a loop.
+   - `VITE_API_URL=https://api.canadianmdjobs.com` and
+     `VITE_WS_URL=wss://api.canadianmdjobs.com` (rebuild required)
 4. Close port 8001: `sudo ufw delete allow 8001/tcp`
 5. Add the Stripe webhook and verify the Resend domain — see step 7 of
    `deploy/COOLIFY.md`.
@@ -230,7 +232,7 @@ automatically, so it needs no separate change.
 Once the API is on HTTPS, moving the frontend to Vercel is a small job:
 
 - Import the repo on Vercel with root directory `canadamedical-frontend`
-- Set `VITE_API_URL=https://api.YOUR_DOMAIN` and `VITE_WS_URL=wss://...`
+- Set `VITE_API_URL=https://api.canadianmdjobs.com` and `VITE_WS_URL=wss://...`
 - Add the Vercel URL to `CORS_EXTRA_ORIGIN` on the backend so the API accepts
   requests from that origin
 - Drop the `frontend` service from the compose file

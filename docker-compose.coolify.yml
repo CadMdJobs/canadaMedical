@@ -12,8 +12,8 @@
 #
 # In Coolify:
 #   1. New Resource → Docker Compose → point at this file
-#   2. Set the domain on `frontend` (https://YOUR_DOMAIN) and on `backend`
-#      (https://api.YOUR_DOMAIN)
+#   2. Set the domain on `frontend` (https://canadianmdjobs.com) and on `backend`
+#      (https://api.canadianmdjobs.com)
 #   3. Add the environment variables listed in .env.production.template.
 #      VITE_API_URL and VITE_WS_URL MUST be marked as *Build Variables*.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -203,7 +203,7 @@ services:
         max-file: "3"
 
   # ── Django / Daphne (web) ────────────────────────────────────────────────────
-  # Traefik routes api.YOUR_DOMAIN here. `expose` (not `ports`) keeps the
+  # Traefik routes api.canadianmdjobs.com here. `expose` (not `ports`) keeps the
   # service on the Docker network where Coolify's proxy can see it.
   backend:
     <<: *backend-common

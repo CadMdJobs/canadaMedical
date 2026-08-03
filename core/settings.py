@@ -498,6 +498,10 @@ X_FRAME_OPTIONS = 'DENY'
 
 # ── Production-only SSL / HSTS ────────────────────────────────────────────────
 if not DEBUG and config('SECURE_SSL', default=False, cast=bool):
+    # Traefik terminates TLS and forwards to the container over plain HTTP, so
+    # request.is_secure() is False without this and SECURE_SSL_REDIRECT sends
+    # the browser into an endless https -> proxy -> http -> https loop.
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True

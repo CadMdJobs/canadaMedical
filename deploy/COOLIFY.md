@@ -42,8 +42,8 @@ of them — the rest stay internal:
 
 | Service    | Domain                     | Port |
 | ---------- | -------------------------- | ---- |
-| `frontend` | `https://YOUR_DOMAIN`      | 80   |
-| `backend`  | `https://api.YOUR_DOMAIN`  | 8000 |
+| `frontend` | `https://canadianmdjobs.com`      | 80   |
+| `backend`  | `https://api.canadianmdjobs.com`  | 8000 |
 
 Leave `db`, `redis`, `pgbouncer`, `celery-worker` and `celery-beat` with no
 domain. They must not be reachable from the internet.
@@ -70,8 +70,8 @@ openssl rand -base64 32 | tr -d '/+=' | head -c 40
 # ── Django core ──────────────────────────────────────────────────────────────
 SECRET_KEY=<generated>
 DEBUG=False
-ALLOWED_HOSTS=api.YOUR_DOMAIN,YOUR_DOMAIN,www.YOUR_DOMAIN
-FRONTEND_URL=https://YOUR_DOMAIN
+ALLOWED_HOSTS=api.canadianmdjobs.com,canadianmdjobs.com,www.canadianmdjobs.com
+FRONTEND_URL=https://canadianmdjobs.com
 CORS_EXTRA_ORIGIN=
 SECURE_SSL=True
 LOG_LEVEL=WARNING
@@ -98,7 +98,7 @@ STRIPE_WEBHOOK_SECRET=whsec_...     # fill in after step 7
 
 # ── Resend (transactional email) ─────────────────────────────────────────────
 RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL=noreply@YOUR_DOMAIN
+RESEND_FROM_EMAIL=noreply@canadianmdjobs.com
 RESEND_TEST_EMAIL=
 
 # ── AWS S3 (optional — omit entirely to store uploads on the local volume) ───
@@ -117,8 +117,8 @@ These two must be marked **Build Variable** in Coolify, not ordinary
 environment variables:
 
 ```ini
-VITE_API_URL=https://api.YOUR_DOMAIN
-VITE_WS_URL=wss://api.YOUR_DOMAIN
+VITE_API_URL=https://api.canadianmdjobs.com
+VITE_WS_URL=wss://api.canadianmdjobs.com
 ```
 
 Vite inlines them into the JS bundle at build time. As plain runtime env vars
@@ -141,7 +141,7 @@ finished cleanly.
 Verify:
 
 ```bash
-curl https://api.YOUR_DOMAIN/api/health/
+curl https://api.canadianmdjobs.com/api/health/
 # {"status":"ok","checks":{"db":{...},"redis":{...}}}
 ```
 
@@ -157,7 +157,7 @@ it):
 python manage.py createsuperuser
 ```
 
-Then log in at `https://api.YOUR_DOMAIN/admin/` — or at whatever path
+Then log in at `https://api.canadianmdjobs.com/admin/` — or at whatever path
 `DJANGO_ADMIN_URL` is set to.
 
 ---
@@ -170,7 +170,7 @@ silently.
 **Stripe webhook** — Dashboard → Developers → Webhooks → add endpoint:
 
 ```
-https://api.YOUR_DOMAIN/api/v1/subscriptions/webhook/
+https://api.canadianmdjobs.com/api/v1/subscriptions/webhook/
 ```
 
 Copy the new signing secret into `STRIPE_WEBHOOK_SECRET` and redeploy the
@@ -191,7 +191,7 @@ resets and the welcome mail.
 In-app notifications run over Django Channels at `/ws/`. Coolify's Traefik
 forwards WebSocket upgrades without extra configuration, but it is worth
 confirming after the first deploy: open the site, log in, and check the browser
-console for a successful `wss://api.YOUR_DOMAIN/ws/notifications/` connection.
+console for a successful `wss://api.canadianmdjobs.com/ws/notifications/` connection.
 
 ### Celery Beat must stay at one replica
 
