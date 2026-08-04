@@ -150,9 +150,8 @@ jobs:
           # open internet.
           #
           # Requires an A record for deploy.canadianmdjobs.com pointing at the
-          # VPS, plus that domain set on the Coolify instance itself
-          # (Settings → General → Instance Domain). Until both exist this step
-          # fails with a DNS or TLS error — see deploy/COOLIFY.md.
+          # VPS, plus that hostname set on the Coolify instance itself
+          # (Settings → General → URL). Both were done on 2026-08-04.
           #
           # -f makes curl exit non-zero on a 4xx/5xx, so a rejected token or a
           # wrong uuid fails the job instead of passing silently.

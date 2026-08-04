@@ -248,9 +248,11 @@ culprit. Port 443 is not subject to that, and it keeps the dashboard off the
 open internet.
 
 For this to work, the Coolify instance itself needs that hostname: Settings →
-General → **Instance Domain** = `https://deploy.canadianmdjobs.com`, plus the
-matching A record (see `deploy/CLIENT-DNS-INSTRUCTIONS.md`). Setting the
-instance domain also moves the dashboard login off plain HTTP.
+General → **URL** (the field whose placeholder reads
+`https://coolify.yourdomain.com`) = `https://deploy.canadianmdjobs.com`, plus
+the matching A record. Done 2026-08-04; Traefik issued the certificate within a
+minute and the dashboard moved off plain HTTP at the same time — it is no longer
+reachable at `http://IP:8000`.
 
 ### A 504 after switching compose files means Traefik, not the app
 
