@@ -22,6 +22,7 @@ import {
   UserCircle,
   Building2,
   DollarSign,
+  Tags,
   Menu,
   X,
 } from "lucide-react";
@@ -55,6 +56,7 @@ const NAV_GROUPS: { title: string; links: AdminLink[] }[] = [
       { to: "/admin/contacts", label: "Contacts", icon: Mail },
       { to: "/admin/enterprise", label: "Enterprise Requests", icon: Building2 },
       { to: "/admin/revenue", label: "Revenue & Billing", icon: DollarSign },
+      { to: "/admin/plans", label: "Pricing Plans", icon: Tags },
     ],
   },
   {

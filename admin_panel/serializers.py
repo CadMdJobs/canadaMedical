@@ -9,6 +9,7 @@ from contact.models import ContactSubmission
 from faq.models import FAQ
 from jobs.models import Job
 from stats.models import PlatformStats
+from subscriptions.models import SubscriptionPlan
 from testimonials.models import Testimonial
 from .models import AdminNotification
 
@@ -249,6 +250,90 @@ class AdminFAQSerializer(serializers.ModelSerializer):
         model = FAQ
         fields = ['id', 'question', 'answer', 'category', 'order', 'is_active', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+
+# ── Subscription plans ────────────────────────────────────────────────────────
+
+class AdminSubscriptionPlanSerializer(serializers.ModelSerializer):
+    """Editable view of a pricing tier.
+
+    The Stripe IDs are exposed read-only: they are set by the sync service, and
+    letting an admin type one in by hand is a direct route to billing the wrong
+    amount. `subscriber_count` is here so the UI can warn before a price change
+    that affects real customers.
+    """
+
+    subscriber_count = serializers.SerializerMethodField()
+    stripe_in_sync = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SubscriptionPlan
+        fields = [
+            'id', 'name', 'plan_type', 'price_monthly',
+            'is_free', 'is_enterprise', 'is_popular',
+            'job_post_limit', 'features', 'order',
+            'stripe_price_id', 'stripe_product_id',
+            'subscriber_count', 'stripe_in_sync',
+        ]
+        read_only_fields = ['id', 'stripe_price_id', 'stripe_product_id']
+
+    @extend_schema_field(OpenApiTypes.INT)
+    def get_subscriber_count(self, obj):
+        return obj.subscriptions.filter(status='active').count()
+
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def get_stripe_in_sync(self, obj):
+        """False when checkout would charge something other than the advertised
+        price. Free and enterprise tiers never use Stripe checkout, so they are
+        reported as in sync rather than as a problem to fix."""
+        if obj.is_free or obj.is_enterprise:
+            return True
+        return bool(obj.stripe_price_id)
+
+    def validate_features(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError('Features must be a list of strings.')
+        cleaned = [str(item).strip() for item in value if str(item).strip()]
+        if len(cleaned) != len(value):
+            raise serializers.ValidationError('Features cannot contain blank entries.')
+        return cleaned
+
+    def validate_price_monthly(self, value):
+        if value < 0:
+            raise serializers.ValidationError('Price cannot be negative.')
+        return value
+
+    def validate_job_post_limit(self, value):
+        # Null is meaningful here — it is how "unlimited" is stored.
+        if value is not None and value < 0:
+            raise serializers.ValidationError('Job post limit cannot be negative.')
+        return value
+
+    def validate(self, attrs):
+        # Merge against the instance so PATCH requests are validated on the
+        # resulting state, not just the fields that happen to be present.
+        def resolved(field):
+            if field in attrs:
+                return attrs[field]
+            return getattr(self.instance, field, None)
+
+        is_free = resolved('is_free')
+        is_enterprise = resolved('is_enterprise')
+        price = resolved('price_monthly')
+
+        if is_free and is_enterprise:
+            raise serializers.ValidationError(
+                'A plan cannot be both free and enterprise.'
+            )
+        if is_free and price and price > 0:
+            raise serializers.ValidationError(
+                'A free plan must have a price of 0.'
+            )
+        if not is_free and not is_enterprise and (price is None or price <= 0):
+            raise serializers.ValidationError(
+                'A paid plan needs a price above 0, or mark it free/enterprise.'
+            )
+        return attrs
 
 
 # ── Stats ─────────────────────────────────────────────────────────────────────

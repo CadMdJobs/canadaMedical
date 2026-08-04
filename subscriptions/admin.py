@@ -1,12 +1,36 @@
-from django.contrib import admin
+from django.contrib import admin, messages
+from services.plan_pricing_service import StripeSyncError, sync_plan_to_stripe
 from .models import SubscriptionPlan, UserSubscription, PaymentHistory, EnterpriseRequest, CustomSubscriptionPlan
 
 
 @admin.register(SubscriptionPlan)
 class SubscriptionPlanAdmin(admin.ModelAdmin):
-    list_display = ['name', 'plan_type', 'price_monthly', 'is_free', 'is_enterprise', 'is_popular', 'job_post_limit', 'order']
+    list_display = [
+        'name', 'plan_type', 'price_monthly', 'stripe_status',
+        'is_free', 'is_enterprise', 'is_popular', 'job_post_limit', 'order',
+    ]
     list_editable = ['order', 'is_popular', 'is_enterprise']
+    readonly_fields = ['stripe_price_id', 'stripe_product_id']
     ordering = ['order']
+    actions = ['sync_to_stripe']
+
+    @admin.display(description='Stripe')
+    def stripe_status(self, obj):
+        """Editing price_monthly changes the advertised figure only — checkout
+        bills whatever stripe_price_id points at, so surface the difference."""
+        if obj.is_free or obj.is_enterprise:
+            return 'n/a'
+        return 'linked' if obj.stripe_price_id else 'NOT LINKED'
+
+    @admin.action(description='Sync selected plans to Stripe')
+    def sync_to_stripe(self, request, queryset):
+        for plan in queryset:
+            try:
+                result = sync_plan_to_stripe(plan)
+            except StripeSyncError as exc:
+                self.message_user(request, f'{plan.name}: {exc}', level=messages.ERROR)
+            else:
+                self.message_user(request, f'{plan.name}: {result}')
 
 
 @admin.register(UserSubscription)

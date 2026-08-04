@@ -25,8 +25,9 @@ from core.exceptions import success_response
 from core.permissions import IsAdminUser
 from faq.models import FAQ
 from jobs.models import Job, JobApplication
+from services.plan_pricing_service import StripeSyncError, sync_plan_to_stripe
 from stats.models import PlatformStats
-from subscriptions.models import PaymentHistory, UserSubscription
+from subscriptions.models import PaymentHistory, SubscriptionPlan, UserSubscription
 from testimonials.models import Testimonial
 
 from .filters import AdminAssessmentFilter, AdminContactFilter, AdminJobFilter, AdminUserFilter
@@ -42,6 +43,7 @@ from .serializers import (
     AdminNotificationSerializer,
     AdminProfileSerializer,
     AdminStatsSerializer,
+    AdminSubscriptionPlanSerializer,
     AdminTestimonialSerializer,
     AdminUserDetailSerializer,
     AdminUserListSerializer,
@@ -826,6 +828,146 @@ class AdminFAQToggleView(APIView):
         obj.save(update_fields=['is_active'])
         state = 'activated' if obj.is_active else 'deactivated'
         return success_response(data=AdminFAQSerializer(obj).data, message=f'FAQ {state}.')
+
+
+# ── Subscription Plan Management ───────────────────────────────────────────────
+
+@extend_schema_view(
+    get=extend_schema(
+        tags=['Admin - Plans'],
+        operation_id='admin_plan_list',
+        summary='List subscription plans (admin)',
+        responses={200: AdminSubscriptionPlanSerializer},
+    ),
+    post=extend_schema(
+        tags=['Admin - Plans'],
+        operation_id='admin_plan_create',
+        summary='Create a subscription plan (admin)',
+        request=AdminSubscriptionPlanSerializer,
+        responses={201: AdminSubscriptionPlanSerializer},
+    ),
+)
+class AdminPlanListCreateView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        qs = SubscriptionPlan.objects.all().order_by('order', 'id')
+        return success_response(data=AdminSubscriptionPlanSerializer(qs, many=True).data)
+
+    def post(self, request):
+        serializer = AdminSubscriptionPlanSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        plan = serializer.save()
+        return success_response(
+            data=AdminSubscriptionPlanSerializer(plan).data,
+            message='Plan created. Run "Sync to Stripe" before selling it.',
+            status_code=status.HTTP_201_CREATED,
+        )
+
+
+@extend_schema_view(
+    put=extend_schema(
+        tags=['Admin - Plans'],
+        operation_id='admin_plan_update',
+        summary='Update a subscription plan (admin)',
+        request=AdminSubscriptionPlanSerializer,
+        responses={200: AdminSubscriptionPlanSerializer},
+    ),
+    delete=extend_schema(
+        tags=['Admin - Plans'],
+        operation_id='admin_plan_delete',
+        summary='Delete a subscription plan (admin)',
+        request=None,
+        responses={200: OpenApiTypes.OBJECT},
+    ),
+)
+class AdminPlanDetailView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def put(self, request, pk):
+        plan = get_object_or_404(SubscriptionPlan, pk=pk)
+        old_price = plan.price_monthly
+
+        serializer = AdminSubscriptionPlanSerializer(plan, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        plan = serializer.save()
+
+        # The price on the page and the price Stripe charges are separate
+        # things; say so plainly rather than letting the admin assume the edit
+        # took effect end to end.
+        message = 'Plan updated.'
+        if plan.price_monthly != old_price and not (plan.is_free or plan.is_enterprise):
+            message = (
+                f'Plan updated. Checkout still charges the old price until you '
+                f'run "Sync to Stripe".'
+            )
+
+        return success_response(
+            data=AdminSubscriptionPlanSerializer(plan).data,
+            message=message,
+        )
+
+    def delete(self, request, pk):
+        plan = get_object_or_404(SubscriptionPlan, pk=pk)
+
+        # UserSubscription.plan is PROTECT, so the delete would raise anyway —
+        # this turns a 500 into an explanation the admin can act on.
+        active = plan.subscriptions.filter(status='active').count()
+        if active:
+            return success_response(
+                message=(
+                    f'Cannot delete: {active} active subscriber(s) are on this plan. '
+                    f'Move them to another plan first.'
+                ),
+                status_code=status.HTTP_409_CONFLICT,
+            )
+        if plan.subscriptions.exists():
+            return success_response(
+                message=(
+                    'Cannot delete: this plan has past subscriptions and removing it '
+                    'would break billing history. Consider renaming it instead.'
+                ),
+                status_code=status.HTTP_409_CONFLICT,
+            )
+
+        plan.delete()
+        return success_response(message='Plan deleted.')
+
+
+@extend_schema_view(
+    post=extend_schema(
+        tags=['Admin - Plans'],
+        operation_id='admin_plan_sync_stripe',
+        summary='Sync a plan price to Stripe (admin)',
+        request=None,
+        responses={200: AdminSubscriptionPlanSerializer},
+    ),
+)
+class AdminPlanStripeSyncView(APIView):
+    """Creates a Stripe price matching the plan's current `price_monthly`.
+
+    Separate from the update endpoint on purpose: syncing reaches an external
+    payment provider and changes what customers are charged, so it stays an
+    explicit action rather than a side effect of saving a form.
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, pk):
+        plan = get_object_or_404(SubscriptionPlan, pk=pk)
+        try:
+            result = sync_plan_to_stripe(plan)
+        except StripeSyncError as exc:
+            return success_response(
+                message=f'Stripe rejected the change: {exc}',
+                status_code=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        plan.refresh_from_db()
+        return success_response(
+            data=AdminSubscriptionPlanSerializer(plan).data,
+            message=result,
+        )
 
 
 # ── Stats Management ───────────────────────────────────────────────────────────

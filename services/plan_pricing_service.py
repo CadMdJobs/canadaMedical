@@ -1,0 +1,123 @@
+"""Keeps a SubscriptionPlan's price in Stripe in step with the database.
+
+Checkout charges whatever `plan.stripe_price_id` points at, not the
+`price_monthly` column, so editing the price in an admin screen without
+touching Stripe changes the advertised figure and leaves the amount actually
+billed untouched. This module closes that gap.
+
+Stripe prices are immutable by design — you cannot edit an amount, you create a
+new Price and point at it. Existing subscribers keep billing at the price they
+signed up on until they are migrated, which is the behaviour we want: a price
+change should never silently re-bill current customers.
+"""
+
+import logging
+from decimal import Decimal
+
+import stripe
+from django.conf import settings
+
+logger = logging.getLogger(__name__)
+
+
+class StripeSyncError(Exception):
+    """Raised when Stripe rejects a product or price operation."""
+
+
+def stripe_configured():
+    return bool(getattr(settings, 'STRIPE_SECRET_KEY', ''))
+
+
+def _client():
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    return stripe
+
+
+def to_minor_units(amount):
+    """Decimal dollars -> integer cents, rounded half-up.
+
+    Stripe rejects fractional cents, and float arithmetic on money loses the
+    cent this rounding is meant to preserve, so the conversion goes through
+    Decimal.
+    """
+    cents = (Decimal(str(amount)) * 100).quantize(Decimal('1'))
+    return int(cents)
+
+
+def sync_plan_to_stripe(plan, currency='usd'):
+    """Point `plan` at a Stripe price matching its current `price_monthly`.
+
+    Creates the product on first sync and a new recurring price whenever the
+    amount has drifted. Returns a short status string describing what happened,
+    suitable for showing back to an admin.
+
+    Free and enterprise plans never reach Stripe: the first is not billed and
+    the second is quoted per customer through CustomSubscriptionPlan.
+    """
+    if plan.is_free or plan.is_enterprise:
+        return 'skipped: plan is not billed through Stripe checkout'
+
+    if not stripe_configured():
+        return 'skipped: STRIPE_SECRET_KEY is not set'
+
+    s = _client()
+    amount = to_minor_units(plan.price_monthly)
+
+    if amount <= 0:
+        return 'skipped: price must be above zero to bill through Stripe'
+
+    try:
+        product_id = plan.stripe_product_id
+        if not product_id:
+            product = s.Product.create(
+                name=f'CanadianMdJobs - {plan.name} Plan',
+                description=f'{plan.name} subscription for employers',
+                metadata={'plan_id': str(plan.pk)},
+            )
+            product_id = product.id
+            logger.info('Created Stripe product %s for plan %s', product_id, plan.pk)
+
+        # An existing price that already matches means there is nothing to do —
+        # creating a duplicate would leave dead prices accumulating in Stripe.
+        if plan.stripe_price_id:
+            existing = s.Price.retrieve(plan.stripe_price_id)
+            if existing.unit_amount == amount and existing.currency == currency:
+                if product_id != plan.stripe_product_id:
+                    plan.stripe_product_id = product_id
+                    plan.save(update_fields=['stripe_product_id'])
+                return 'unchanged: Stripe already matches this price'
+
+        price = s.Price.create(
+            product=product_id,
+            unit_amount=amount,
+            currency=currency,
+            recurring={'interval': 'month'},
+            metadata={'plan_id': str(plan.pk)},
+        )
+
+        previous_price_id = plan.stripe_price_id
+        plan.stripe_product_id = product_id
+        plan.stripe_price_id = price.id
+        plan.save(update_fields=['stripe_product_id', 'stripe_price_id'])
+
+        # Deactivating the old price stops it being reused by anything new,
+        # while existing subscriptions attached to it keep renewing normally.
+        if previous_price_id and previous_price_id != price.id:
+            try:
+                s.Price.modify(previous_price_id, active=False)
+            except stripe.StripeError as exc:
+                # Not fatal: the new price is live and saved. Worth a log line
+                # because the stale price stays visible in the Stripe dashboard.
+                logger.warning(
+                    'Could not deactivate old Stripe price %s: %s', previous_price_id, exc,
+                )
+
+        logger.info(
+            'Plan %s synced to Stripe price %s (%s %s)',
+            plan.pk, price.id, amount, currency,
+        )
+        return f'synced: new Stripe price created at {amount / 100:.2f} {currency.upper()}'
+
+    except stripe.StripeError as exc:
+        logger.error('Stripe sync failed for plan %s: %s', plan.pk, exc)
+        raise StripeSyncError(str(exc)) from exc

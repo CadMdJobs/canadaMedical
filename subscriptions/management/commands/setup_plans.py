@@ -1,6 +1,10 @@
 from django.core.management.base import BaseCommand
 
 
+# Seed values for a fresh database only. Prices and features are edited through
+# the admin panel once the site is running (Admin → Pricing Plans), so this
+# command uses create-only semantics — re-running it must not overwrite a price
+# the client has since changed.
 PLANS = [
     {
         'name': 'Basic',
@@ -60,17 +64,32 @@ PLANS = [
 
 
 class Command(BaseCommand):
-    help = 'Create initial subscription plans in the database'
+    help = 'Seed the default subscription plans (existing plans are left untouched)'
 
-    def handle(self, *args, **kwargs):
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--reset',
+            action='store_true',
+            help='Overwrite existing plans with the seed values, discarding admin edits.',
+        )
+
+    def handle(self, *args, **options):
         from subscriptions.models import SubscriptionPlan
 
         for plan_data in PLANS:
-            plan, created = SubscriptionPlan.objects.update_or_create(
-                name=plan_data['name'],
-                defaults=plan_data,
-            )
-            verb = 'Created' if created else 'Updated'
+            if options['reset']:
+                plan, created = SubscriptionPlan.objects.update_or_create(
+                    name=plan_data['name'], defaults=plan_data,
+                )
+                verb = 'Created' if created else 'Reset'
+            else:
+                plan, created = SubscriptionPlan.objects.get_or_create(
+                    name=plan_data['name'], defaults=plan_data,
+                )
+                verb = 'Created' if created else 'Kept existing'
+
             self.stdout.write(f'{verb}: {plan.name} (${plan.price_monthly}/mo)')
 
-        self.stdout.write(self.style.SUCCESS('All plans set up successfully.'))
+        self.stdout.write(self.style.SUCCESS(
+            '\nDone. Edit prices in Admin → Pricing Plans, then press Sync to Stripe.'
+        ))

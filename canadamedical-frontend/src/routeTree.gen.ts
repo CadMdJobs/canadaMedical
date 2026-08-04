@@ -34,6 +34,7 @@ import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminTestimonialsRouteImport } from './routes/admin.testimonials'
 import { Route as AdminRevenueRouteImport } from './routes/admin.revenue'
 import { Route as AdminProfileRouteImport } from './routes/admin.profile'
+import { Route as AdminPlansRouteImport } from './routes/admin.plans'
 import { Route as AdminNotificationsRouteImport } from './routes/admin.notifications'
 import { Route as AdminJobsRouteImport } from './routes/admin.jobs'
 import { Route as AdminFaqRouteImport } from './routes/admin.faq'
@@ -167,6 +168,11 @@ const AdminProfileRoute = AdminProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminPlansRoute = AdminPlansRouteImport.update({
+  id: '/plans',
+  path: '/plans',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminNotificationsRoute = AdminNotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
@@ -231,6 +237,7 @@ export interface FileRoutesByFullPath {
   '/admin/faq': typeof AdminFaqRoute
   '/admin/jobs': typeof AdminJobsRoute
   '/admin/notifications': typeof AdminNotificationsRoute
+  '/admin/plans': typeof AdminPlansRoute
   '/admin/profile': typeof AdminProfileRoute
   '/admin/revenue': typeof AdminRevenueRoute
   '/admin/testimonials': typeof AdminTestimonialsRoute
@@ -263,6 +270,7 @@ export interface FileRoutesByTo {
   '/admin/faq': typeof AdminFaqRoute
   '/admin/jobs': typeof AdminJobsRoute
   '/admin/notifications': typeof AdminNotificationsRoute
+  '/admin/plans': typeof AdminPlansRoute
   '/admin/profile': typeof AdminProfileRoute
   '/admin/revenue': typeof AdminRevenueRoute
   '/admin/testimonials': typeof AdminTestimonialsRoute
@@ -299,6 +307,7 @@ export interface FileRoutesById {
   '/admin/faq': typeof AdminFaqRoute
   '/admin/jobs': typeof AdminJobsRoute
   '/admin/notifications': typeof AdminNotificationsRoute
+  '/admin/plans': typeof AdminPlansRoute
   '/admin/profile': typeof AdminProfileRoute
   '/admin/revenue': typeof AdminRevenueRoute
   '/admin/testimonials': typeof AdminTestimonialsRoute
@@ -335,6 +344,7 @@ export interface FileRouteTypes {
     | '/admin/faq'
     | '/admin/jobs'
     | '/admin/notifications'
+    | '/admin/plans'
     | '/admin/profile'
     | '/admin/revenue'
     | '/admin/testimonials'
@@ -367,6 +377,7 @@ export interface FileRouteTypes {
     | '/admin/faq'
     | '/admin/jobs'
     | '/admin/notifications'
+    | '/admin/plans'
     | '/admin/profile'
     | '/admin/revenue'
     | '/admin/testimonials'
@@ -402,6 +413,7 @@ export interface FileRouteTypes {
     | '/admin/faq'
     | '/admin/jobs'
     | '/admin/notifications'
+    | '/admin/plans'
     | '/admin/profile'
     | '/admin/revenue'
     | '/admin/testimonials'
@@ -614,6 +626,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminProfileRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/plans': {
+      id: '/admin/plans'
+      path: '/plans'
+      fullPath: '/admin/plans'
+      preLoaderRoute: typeof AdminPlansRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/notifications': {
       id: '/admin/notifications'
       path: '/notifications'
@@ -694,6 +713,7 @@ interface AdminRouteChildren {
   AdminFaqRoute: typeof AdminFaqRoute
   AdminJobsRoute: typeof AdminJobsRoute
   AdminNotificationsRoute: typeof AdminNotificationsRoute
+  AdminPlansRoute: typeof AdminPlansRoute
   AdminProfileRoute: typeof AdminProfileRoute
   AdminRevenueRoute: typeof AdminRevenueRoute
   AdminTestimonialsRoute: typeof AdminTestimonialsRoute
@@ -708,6 +728,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminFaqRoute: AdminFaqRoute,
   AdminJobsRoute: AdminJobsRoute,
   AdminNotificationsRoute: AdminNotificationsRoute,
+  AdminPlansRoute: AdminPlansRoute,
   AdminProfileRoute: AdminProfileRoute,
   AdminRevenueRoute: AdminRevenueRoute,
   AdminTestimonialsRoute: AdminTestimonialsRoute,

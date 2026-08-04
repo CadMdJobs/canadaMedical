@@ -30,6 +30,9 @@ from .views import (
     AdminNotificationReadView,
     AdminPendingJobsView,
     AdminPhysiciansView,
+    AdminPlanDetailView,
+    AdminPlanListCreateView,
+    AdminPlanStripeSyncView,
     AdminProfileView,
     AdminStatsRecalculateView,
     AdminStatsView,
@@ -81,6 +84,11 @@ urlpatterns = [
     path('faqs/', AdminFAQListCreateView.as_view(), name='admin-faq-list'),
     path('faqs/<int:pk>/', AdminFAQDetailView.as_view(), name='admin-faq-detail'),
     path('faqs/<int:pk>/toggle/', AdminFAQToggleView.as_view(), name='admin-faq-toggle'),
+
+    # Subscription plans
+    path('plans/', AdminPlanListCreateView.as_view(), name='admin-plan-list'),
+    path('plans/<int:pk>/', AdminPlanDetailView.as_view(), name='admin-plan-detail'),
+    path('plans/<int:pk>/sync-stripe/', AdminPlanStripeSyncView.as_view(), name='admin-plan-sync-stripe'),
 
     # Stats
     path('stats/', AdminStatsView.as_view(), name='admin-stats'),

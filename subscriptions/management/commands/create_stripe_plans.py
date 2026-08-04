@@ -1,62 +1,42 @@
-import stripe
-from django.conf import settings
 from django.core.management.base import BaseCommand
+
+from services.plan_pricing_service import StripeSyncError, stripe_configured, sync_plan_to_stripe
 
 
 class Command(BaseCommand):
-    help = 'Create Stripe product & price for the Professional plan and save IDs to DB'
+    help = 'Create or refresh Stripe prices so they match price_monthly in the database'
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--force',
-            action='store_true',
-            help='Overwrite existing Stripe product and price IDs for the Professional plan.',
+            '--plan',
+            help='Sync only this plan by name. Default: every paid plan.',
         )
 
     def handle(self, *args, **options):
         from subscriptions.models import SubscriptionPlan
 
-        stripe.api_key = settings.STRIPE_SECRET_KEY
-
-        try:
-            plan = SubscriptionPlan.objects.get(name='Professional')
-        except SubscriptionPlan.DoesNotExist:
+        if not stripe_configured():
             self.stderr.write(self.style.ERROR(
-                'Professional plan not found. Run: python manage.py setup_plans first.'
+                'STRIPE_SECRET_KEY is not set — nothing to sync.'
             ))
             return
 
-        if plan.stripe_price_id:
-            self.stdout.write(self.style.WARNING(
-                f'Professional plan already has stripe_price_id: {plan.stripe_price_id}'
-            ))
-            self.stdout.write('Pass --force to overwrite.')
-            if not options['force']:
+        plans = SubscriptionPlan.objects.filter(is_free=False, is_enterprise=False)
+        if options['plan']:
+            plans = plans.filter(name=options['plan'])
+            if not plans.exists():
+                self.stderr.write(self.style.ERROR(
+                    f'No billable plan named "{options["plan"]}". '
+                    f'Run: python manage.py setup_plans first.'
+                ))
                 return
 
-        self.stdout.write('Creating Stripe product...')
-        product = stripe.Product.create(
-            name='CanadianMdJobs - Professional Plan',
-            description='For healthcare organizations with regular recruitment needs',
-        )
-        self.stdout.write(f'  Product ID: {product.id}')
+        for plan in plans:
+            try:
+                result = sync_plan_to_stripe(plan)
+            except StripeSyncError as exc:
+                self.stderr.write(self.style.ERROR(f'{plan.name}: {exc}'))
+            else:
+                self.stdout.write(f'{plan.name} (${plan.price_monthly}/mo): {result}')
 
-        self.stdout.write('Creating Stripe price ($499/month)...')
-        price = stripe.Price.create(
-            product=product.id,
-            unit_amount=49900,
-            currency='usd',
-            recurring={'interval': 'month'},
-        )
-        self.stdout.write(f'  Price ID:   {price.id}')
-
-        plan.stripe_price_id = price.id
-        plan.stripe_product_id = product.id
-        plan.save(update_fields=['stripe_price_id', 'stripe_product_id'])
-
-        self.stdout.write(self.style.SUCCESS(
-            f'\nStripe plans created and saved to Professional plan (id={plan.pk}).'
-        ))
-        self.stdout.write('\nAdd these to your .env if needed:')
-        self.stdout.write(f'  STRIPE_PRODUCT_ID={product.id}')
-        self.stdout.write(f'  STRIPE_PRICE_ID={price.id}')
+        self.stdout.write(self.style.SUCCESS('\nDone.'))
