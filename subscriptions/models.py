@@ -1,4 +1,7 @@
+from decimal import ROUND_HALF_UP, Decimal
+
 from django.conf import settings
+from django.core.validators import MaxValueValidator
 from django.db import models
 
 
@@ -8,12 +11,21 @@ class SubscriptionPlan(models.Model):
     name = models.CharField(max_length=100, unique=True)
     plan_type = models.CharField(max_length=20, choices=PLAN_TYPE_CHOICES, default='employer')
     price_monthly = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # Percent off the monthly rate when billed for a year up front. 0 disables
+    # annual billing for the plan, which is why it is the default: a plan is
+    # only offered yearly once someone deliberately sets a discount.
+    annual_discount_percent = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MaxValueValidator(90)],
+        help_text='Percent off when paying yearly. 0 hides the annual option.',
+    )
     is_free = models.BooleanField(default=False)
     is_enterprise = models.BooleanField(default=False)
     is_popular = models.BooleanField(default=False)
     job_post_limit = models.PositiveIntegerField(null=True, blank=True, help_text='Null = unlimited')
     features = models.JSONField(default=list)
     stripe_price_id = models.CharField(max_length=255, blank=True)
+    stripe_price_id_annual = models.CharField(max_length=255, blank=True)
     stripe_product_id = models.CharField(max_length=255, blank=True)
     order = models.PositiveSmallIntegerField(default=0)
 
@@ -22,6 +34,34 @@ class SubscriptionPlan(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def offers_annual(self):
+        return (
+            self.annual_discount_percent > 0
+            and not self.is_free
+            and not self.is_enterprise
+        )
+
+    @property
+    def annual_monthly_equivalent(self):
+        """Discounted per-month figure, the one advertised on the annual tab.
+
+        Rounded to whole cents here so the site, the admin screen and Stripe
+        all derive the yearly total from the same number instead of each
+        rounding the percentage on its own.
+        """
+        if not self.offers_annual:
+            return self.price_monthly
+        factor = (Decimal(100) - Decimal(self.annual_discount_percent)) / Decimal(100)
+        return (self.price_monthly * factor).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+    @property
+    def price_annual_total(self):
+        """What the customer is actually charged once a year."""
+        return (self.annual_monthly_equivalent * 12).quantize(
+            Decimal('0.01'), rounding=ROUND_HALF_UP,
+        )
 
 
 class UserSubscription(models.Model):

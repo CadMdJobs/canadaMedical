@@ -64,12 +64,69 @@ def to_minor_units(amount):
     return int(cents)
 
 
-def sync_plan_to_stripe(plan, currency='usd'):
-    """Point `plan` at a Stripe price matching its current `price_monthly`.
+def _retire(s, price_id):
+    """Deactivate a superseded price, tolerating failure.
 
-    Creates the product on first sync and a new recurring price whenever the
-    amount has drifted. Returns a short status string describing what happened,
-    suitable for showing back to an admin.
+    Never fatal: the replacement is already live and saved. Worth a log line
+    because a price left active stays visible in the Stripe dashboard.
+    """
+    try:
+        s.Price.modify(price_id, active=False)
+    except stripe.StripeError as exc:
+        logger.warning('Could not deactivate old Stripe price %s: %s', price_id, exc)
+
+
+def _sync_interval(s, plan, product_id, amount, interval, field, currency):
+    """Reconcile one recurring price on `plan`, saving its id to `field`.
+
+    Returns True when a new price was created. Shared by the monthly and
+    annual paths so both get identical drift detection and retirement, rather
+    than one growing a subtle difference from the other.
+    """
+    current_id = getattr(plan, field)
+
+    # An existing price that already matches means there is nothing to do —
+    # creating a duplicate would leave dead prices accumulating in Stripe. A
+    # price this account has never heard of falls through to Price.create
+    # below, which is what rebuilds the catalogue after a test->live switch.
+    if current_id:
+        existing = _exists(s.Price, current_id)
+        if (
+            existing
+            and existing.unit_amount == amount
+            and existing.currency == currency
+            and existing.product == product_id
+            and getattr(existing.recurring, 'interval', None) == interval
+        ):
+            return False
+
+    price = s.Price.create(
+        product=product_id,
+        unit_amount=amount,
+        currency=currency,
+        recurring={'interval': interval},
+        metadata={'plan_id': str(plan.pk)},
+    )
+
+    setattr(plan, field, price.id)
+    if current_id and current_id != price.id:
+        _retire(s, current_id)
+
+    logger.info(
+        'Plan %s synced to Stripe %sly price %s (%s %s)',
+        plan.pk, interval, price.id, amount, currency,
+    )
+    return True
+
+
+def sync_plan_to_stripe(plan, currency='usd'):
+    """Point `plan` at Stripe prices matching its current rates.
+
+    Creates the product on first sync and a new recurring price whenever an
+    amount has drifted. A plan with `annual_discount_percent` above zero also
+    gets a yearly price, so the discount the site advertises is the one the
+    customer is actually charged. Returns a short status string suitable for
+    showing back to an admin.
 
     Free and enterprise plans never reach Stripe: the first is not billed and
     the second is quoted per customer through CustomSubscriptionPlan.
@@ -106,53 +163,35 @@ def sync_plan_to_stripe(plan, currency='usd'):
             product_id = product.id
             logger.info('Created Stripe product %s for plan %s', product_id, plan.pk)
 
-        # An existing price that already matches means there is nothing to do —
-        # creating a duplicate would leave dead prices accumulating in Stripe.
-        # A price this account has never heard of falls through to Price.create
-        # below, which is what rebuilds the catalogue after a test->live switch.
-        if plan.stripe_price_id:
-            existing = _exists(s.Price, plan.stripe_price_id)
-            if (
-                existing
-                and existing.unit_amount == amount
-                and existing.currency == currency
-                and existing.product == product_id
-            ):
-                if product_id != plan.stripe_product_id:
-                    plan.stripe_product_id = product_id
-                    plan.save(update_fields=['stripe_product_id'])
-                return 'unchanged: Stripe already matches this price'
-
-        price = s.Price.create(
-            product=product_id,
-            unit_amount=amount,
-            currency=currency,
-            recurring={'interval': 'month'},
-            metadata={'plan_id': str(plan.pk)},
-        )
-
-        previous_price_id = plan.stripe_price_id
         plan.stripe_product_id = product_id
-        plan.stripe_price_id = price.id
-        plan.save(update_fields=['stripe_product_id', 'stripe_price_id'])
 
-        # Deactivating the old price stops it being reused by anything new,
-        # while existing subscriptions attached to it keep renewing normally.
-        if previous_price_id and previous_price_id != price.id:
-            try:
-                s.Price.modify(previous_price_id, active=False)
-            except stripe.StripeError as exc:
-                # Not fatal: the new price is live and saved. Worth a log line
-                # because the stale price stays visible in the Stripe dashboard.
-                logger.warning(
-                    'Could not deactivate old Stripe price %s: %s', previous_price_id, exc,
+        changed = []
+        if _sync_interval(s, plan, product_id, amount, 'month', 'stripe_price_id', currency):
+            changed.append(f'monthly at {amount / 100:.2f}')
+
+        if plan.offers_annual:
+            annual = to_minor_units(plan.price_annual_total)
+            if _sync_interval(
+                s, plan, product_id, annual, 'year', 'stripe_price_id_annual', currency,
+            ):
+                changed.append(
+                    f'annual at {annual / 100:.2f} '
+                    f'({plan.annual_discount_percent}% off)'
                 )
+        elif plan.stripe_price_id_annual:
+            # The discount was switched off. Retire the yearly price so nobody
+            # can reach it, and clear the id so checkout stops offering it.
+            _retire(s, plan.stripe_price_id_annual)
+            plan.stripe_price_id_annual = ''
+            changed.append('annual billing withdrawn')
 
-        logger.info(
-            'Plan %s synced to Stripe price %s (%s %s)',
-            plan.pk, price.id, amount, currency,
-        )
-        return f'synced: new Stripe price created at {amount / 100:.2f} {currency.upper()}'
+        plan.save(update_fields=[
+            'stripe_product_id', 'stripe_price_id', 'stripe_price_id_annual',
+        ])
+
+        if not changed:
+            return 'unchanged: Stripe already matches this price'
+        return f'synced: {", ".join(changed)} {currency.upper()}'
 
     except stripe.StripeError as exc:
         logger.error('Stripe sync failed for plan %s: %s', plan.pk, exc)

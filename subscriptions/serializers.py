@@ -4,11 +4,24 @@ from .models import SubscriptionPlan, UserSubscription, PaymentHistory, Enterpri
 
 
 class SubscriptionPlanSerializer(serializers.ModelSerializer):
+    # The annual figures are computed server-side so the price the page shows
+    # is the same number Stripe was told to charge. Deriving them in the
+    # browser is how the advertised discount drifted from the billed amount.
+    offers_annual = serializers.BooleanField(read_only=True)
+    annual_monthly_equivalent = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True,
+    )
+    price_annual_total = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True,
+    )
+
     class Meta:
         model = SubscriptionPlan
         fields = [
             'id', 'name', 'price_monthly', 'is_free', 'is_enterprise',
             'is_popular', 'job_post_limit', 'features', 'stripe_price_id',
+            'annual_discount_percent', 'offers_annual',
+            'annual_monthly_equivalent', 'price_annual_total',
         ]
 
 

@@ -25,7 +25,8 @@ PLANS = [
     {
         'name': 'Professional',
         'plan_type': 'employer',
-        'price_monthly': 499,
+        'price_monthly': 399,
+        'annual_discount_percent': 20,
         'is_free': False,
         'is_enterprise': False,
         'is_popular': True,

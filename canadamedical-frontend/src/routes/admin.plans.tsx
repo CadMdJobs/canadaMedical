@@ -28,8 +28,12 @@ interface Plan {
   order: number;
   stripe_price_id: string | null;
   stripe_product_id: string | null;
+  stripe_price_id_annual: string | null;
   subscriber_count: number;
   stripe_in_sync: boolean;
+  annual_discount_percent: number;
+  annual_monthly_equivalent: string;
+  price_annual_total: string;
 }
 
 // job_post_limit is deliberately a string in the form: an empty input means
@@ -38,6 +42,12 @@ const schema = z
   .object({
     name: z.string().min(2, "Name is required"),
     price_monthly: z.coerce.number().min(0, "Price cannot be negative"),
+    annual_discount_percent: z.coerce
+      .number()
+      .min(0, "Discount cannot be negative")
+      // Matches the server cap: a 100% discount is a zero-amount recurring
+      // price, which Stripe refuses to create.
+      .max(90, "Discount cannot exceed 90%"),
     job_post_limit: z.string().optional(),
     order: z.coerce.number().min(0),
     is_free: z.boolean().optional(),
@@ -56,6 +66,10 @@ const schema = z
   .refine((v) => v.is_free || v.is_enterprise || v.price_monthly > 0, {
     message: "A paid plan needs a price above 0",
     path: ["price_monthly"],
+  })
+  .refine((v) => !(v.annual_discount_percent > 0 && (v.is_free || v.is_enterprise)), {
+    message: "Only a paid plan can carry an annual discount",
+    path: ["annual_discount_percent"],
   });
 type FormInput = z.infer<typeof schema>;
 
@@ -141,6 +155,24 @@ function AdminPlansPage() {
           <span className="text-muted-foreground">Custom</span>
         ) : (
           <span className="font-semibold">${Number(r.price_monthly).toFixed(0)}/mo</span>
+        ),
+    },
+    {
+      key: "annual_discount_percent",
+      header: "Annual",
+      render: (r) =>
+        r.annual_discount_percent > 0 && !r.is_free && !r.is_enterprise ? (
+          <div className="leading-tight">
+            <span className="font-semibold text-emerald-600">
+              {r.annual_discount_percent}% off
+            </span>
+            <div className="text-[11px] text-muted-foreground">
+              ${Number(r.annual_monthly_equivalent).toFixed(0)}/mo · $
+              {Number(r.price_annual_total).toFixed(0)}/yr
+            </div>
+          </div>
+        ) : (
+          <span className="text-muted-foreground">—</span>
         ),
     },
     {
@@ -304,6 +336,7 @@ function PlanForm({
     defaultValues: {
       name: initial?.name ?? "",
       price_monthly: initial ? Number(initial.price_monthly) : 0,
+      annual_discount_percent: initial?.annual_discount_percent ?? 0,
       job_post_limit:
         initial?.job_post_limit === null || initial?.job_post_limit === undefined
           ? ""
@@ -319,9 +352,19 @@ function PlanForm({
   const { fields, append, remove } = useFieldArray({ control, name: "features" });
   const isFree = watch("is_free");
   const isEnterprise = watch("is_enterprise");
+  const monthly = Number(watch("price_monthly")) || 0;
+  const discount = Number(watch("annual_discount_percent")) || 0;
+
+  // Mirrors SubscriptionPlan.annual_monthly_equivalent so the preview matches
+  // what the server will store and what Stripe will be told to charge.
+  const annualMonthly = discount > 0 ? (monthly * (100 - discount)) / 100 : monthly;
+  const annualTotal = annualMonthly * 12;
+  const fmt = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`);
+
   const priceChanged =
     initial && !initial.is_free && !initial.is_enterprise &&
-    Number(watch("price_monthly")) !== Number(initial.price_monthly);
+    (monthly !== Number(initial.price_monthly) ||
+      discount !== initial.annual_discount_percent);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -337,6 +380,31 @@ function PlanForm({
           )}
         </Field>
       </div>
+
+      <Field label="Annual discount (%)">
+        <Input
+          type="number"
+          step="1"
+          min="0"
+          max="90"
+          disabled={isFree || isEnterprise}
+          {...register("annual_discount_percent")}
+        />
+        {errors.annual_discount_percent ? (
+          <p className="mt-1 text-xs text-destructive">
+            {errors.annual_discount_percent.message}
+          </p>
+        ) : discount > 0 && !isFree && !isEnterprise ? (
+          <p className="mt-1 text-xs text-emerald-600">
+            Shows as {fmt(annualMonthly)}/mo with {fmt(monthly)} struck through — billed{" "}
+            {fmt(annualTotal)} once a year.
+          </p>
+        ) : (
+          <p className="mt-1 text-xs text-muted-foreground">
+            0 hides the annual option and sells this plan monthly only.
+          </p>
+        )}
+      </Field>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Job post limit">
@@ -404,8 +472,11 @@ function PlanForm({
         <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            Saving updates the price shown to visitors. Checkout keeps charging $
-            {Number(initial?.price_monthly).toFixed(0)} until you press the sync button on this plan.
+            Saving updates what visitors see. Checkout keeps charging the old rate
+            {initial && ` ($${Number(initial.price_monthly).toFixed(0)}/mo`}
+            {initial && initial.annual_discount_percent > 0 &&
+              `, ${initial.annual_discount_percent}% off yearly`}
+            {initial && ")"} until you press the sync button on this plan.
             {initial && initial.subscriber_count > 0 && (
               <> Existing subscribers stay on their current price either way.</>
             )}

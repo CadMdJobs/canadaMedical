@@ -265,6 +265,14 @@ class AdminSubscriptionPlanSerializer(serializers.ModelSerializer):
 
     subscriber_count = serializers.SerializerMethodField()
     stripe_in_sync = serializers.SerializerMethodField()
+    # Shown next to the discount field so the admin sees the resulting figures
+    # before saving, rather than working out the percentage in their head.
+    annual_monthly_equivalent = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True,
+    )
+    price_annual_total = serializers.DecimalField(
+        max_digits=10, decimal_places=2, read_only=True,
+    )
 
     class Meta:
         model = SubscriptionPlan
@@ -272,10 +280,14 @@ class AdminSubscriptionPlanSerializer(serializers.ModelSerializer):
             'id', 'name', 'plan_type', 'price_monthly',
             'is_free', 'is_enterprise', 'is_popular',
             'job_post_limit', 'features', 'order',
-            'stripe_price_id', 'stripe_product_id',
+            'stripe_price_id', 'stripe_product_id', 'stripe_price_id_annual',
             'subscriber_count', 'stripe_in_sync',
+            'annual_discount_percent', 'annual_monthly_equivalent',
+            'price_annual_total',
         ]
-        read_only_fields = ['id', 'stripe_price_id', 'stripe_product_id']
+        read_only_fields = [
+            'id', 'stripe_price_id', 'stripe_product_id', 'stripe_price_id_annual',
+        ]
 
     @extend_schema_field(OpenApiTypes.INT)
     def get_subscriber_count(self, obj):
@@ -309,6 +321,15 @@ class AdminSubscriptionPlanSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Job post limit cannot be negative.')
         return value
 
+    def validate_annual_discount_percent(self, value):
+        # Capped below 100 because a full discount would mean a zero-amount
+        # yearly price, which Stripe rejects for a recurring subscription.
+        if value < 0 or value > 90:
+            raise serializers.ValidationError(
+                'Annual discount must be between 0 and 90 percent.'
+            )
+        return value
+
     def validate(self, attrs):
         # Merge against the instance so PATCH requests are validated on the
         # resulting state, not just the fields that happen to be present.
@@ -332,6 +353,12 @@ class AdminSubscriptionPlanSerializer(serializers.ModelSerializer):
         if not is_free and not is_enterprise and (price is None or price <= 0):
             raise serializers.ValidationError(
                 'A paid plan needs a price above 0, or mark it free/enterprise.'
+            )
+
+        discount = resolved('annual_discount_percent') or 0
+        if discount and (is_free or is_enterprise):
+            raise serializers.ValidationError(
+                'Only a paid plan can carry an annual discount.'
             )
         return attrs
 

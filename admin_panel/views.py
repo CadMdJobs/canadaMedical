@@ -887,6 +887,7 @@ class AdminPlanDetailView(APIView):
     def put(self, request, pk):
         plan = get_object_or_404(SubscriptionPlan, pk=pk)
         old_price = plan.price_monthly
+        old_discount = plan.annual_discount_percent
 
         serializer = AdminSubscriptionPlanSerializer(plan, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
@@ -894,12 +895,17 @@ class AdminPlanDetailView(APIView):
 
         # The price on the page and the price Stripe charges are separate
         # things; say so plainly rather than letting the admin assume the edit
-        # took effect end to end.
+        # took effect end to end. The discount counts as a price change because
+        # it decides the yearly amount.
         message = 'Plan updated.'
-        if plan.price_monthly != old_price and not (plan.is_free or plan.is_enterprise):
+        billing_changed = (
+            plan.price_monthly != old_price
+            or plan.annual_discount_percent != old_discount
+        )
+        if billing_changed and not (plan.is_free or plan.is_enterprise):
             message = (
-                f'Plan updated. Checkout still charges the old price until you '
-                f'run "Sync to Stripe".'
+                'Plan updated. Checkout still charges the old price until you '
+                'run "Sync to Stripe".'
             )
 
         return success_response(

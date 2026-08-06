@@ -10,7 +10,7 @@ class SubscriptionPlanAdmin(admin.ModelAdmin):
         'is_free', 'is_enterprise', 'is_popular', 'job_post_limit', 'order',
     ]
     list_editable = ['order', 'is_popular', 'is_enterprise']
-    readonly_fields = ['stripe_price_id', 'stripe_product_id']
+    readonly_fields = ['stripe_price_id', 'stripe_price_id_annual', 'stripe_product_id']
     ordering = ['order']
     actions = ['sync_to_stripe']
 

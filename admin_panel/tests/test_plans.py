@@ -28,6 +28,14 @@ def make_paid_plan(**kwargs):
     return SubscriptionPlan.objects.create(**defaults)
 
 
+def _price(amount, product, interval='month', currency='usd'):
+    """Stand-in for a retrieved Stripe Price."""
+    return MagicMock(
+        unit_amount=amount, currency=currency, product=product,
+        recurring=MagicMock(interval=interval),
+    )
+
+
 class PlanCrudTest(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -114,6 +122,46 @@ class PlanCrudTest(TestCase):
             format='json',
         )
         self.assertEqual(res.status_code, 400)
+
+    def test_annual_discount_is_editable(self):
+        r = self.client.put(
+            f'/api/v1/admin/plans/{self.plan.id}/',
+            {'annual_discount_percent': 25}, format='json',
+        )
+        self.assertEqual(r.status_code, 200)
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.annual_discount_percent, 25)
+        self.assertEqual(self.plan.annual_monthly_equivalent, Decimal('299.25'))
+
+    def test_changing_only_the_discount_warns_about_stripe(self):
+        r = self.client.put(
+            f'/api/v1/admin/plans/{self.plan.id}/',
+            {'annual_discount_percent': 25}, format='json',
+        )
+        self.assertIn('Sync to Stripe', r.data['message'])
+
+    def test_discount_above_the_cap_is_rejected(self):
+        r = self.client.put(
+            f'/api/v1/admin/plans/{self.plan.id}/',
+            {'annual_discount_percent': 95}, format='json',
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_annual_stripe_id_cannot_be_set_by_hand(self):
+        self.client.put(
+            f'/api/v1/admin/plans/{self.plan.id}/',
+            {'stripe_price_id_annual': 'price_attacker'}, format='json',
+        )
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.stripe_price_id_annual, '')
+
+    def test_a_free_plan_cannot_carry_a_discount(self):
+        free = SubscriptionPlan.objects.create(name='Basic', price_monthly=0, is_free=True)
+        r = self.client.put(
+            f'/api/v1/admin/plans/{free.id}/',
+            {'annual_discount_percent': 20}, format='json',
+        )
+        self.assertEqual(r.status_code, 400)
 
     def test_blank_feature_entries_are_rejected(self):
         res = self.client.put(
@@ -202,9 +250,7 @@ class StripeSyncServiceTest(TestCase):
 
         s = MagicMock()
         s.Product.retrieve.return_value = MagicMock(id='prod_1')
-        s.Price.retrieve.return_value = MagicMock(
-            unit_amount=39900, currency='usd', product='prod_1',
-        )
+        s.Price.retrieve.return_value = _price(39900, 'prod_1')
         mock_client.return_value = s
 
         result = sync_plan_to_stripe(self.plan)
@@ -222,9 +268,7 @@ class StripeSyncServiceTest(TestCase):
 
         s = MagicMock()
         s.Product.retrieve.return_value = MagicMock(id='prod_1')
-        s.Price.retrieve.return_value = MagicMock(
-            unit_amount=39900, currency='usd', product='prod_1',
-        )
+        s.Price.retrieve.return_value = _price(39900, 'prod_1')
         s.Price.create.return_value = MagicMock(id='price_new')
         mock_client.return_value = s
 
@@ -281,9 +325,7 @@ class StripeSyncServiceTest(TestCase):
         )
         s.Product.create.return_value = MagicMock(id='prod_new')
         # Same amount, but still hanging off the product that no longer exists.
-        s.Price.retrieve.return_value = MagicMock(
-            unit_amount=39900, currency='usd', product='prod_old',
-        )
+        s.Price.retrieve.return_value = _price(39900, 'prod_old')
         s.Price.create.return_value = MagicMock(id='price_2')
         mock_client.return_value = s
 
@@ -326,6 +368,202 @@ class StripeSyncServiceTest(TestCase):
             sync_plan_to_stripe(self.plan)
 
 
+class AnnualDiscountTest(TestCase):
+    """The discount is admin-set, so the arithmetic has to hold for any value."""
+
+    def test_no_discount_means_no_annual_offer(self):
+        plan = make_paid_plan()
+        self.assertFalse(plan.offers_annual)
+        self.assertEqual(plan.annual_monthly_equivalent, Decimal('399'))
+
+    def test_discount_derives_both_figures(self):
+        plan = make_paid_plan(annual_discount_percent=20)
+        self.assertTrue(plan.offers_annual)
+        self.assertEqual(plan.annual_monthly_equivalent, Decimal('319.20'))
+        self.assertEqual(plan.price_annual_total, Decimal('3830.40'))
+
+    def test_odd_percentage_keeps_cents(self):
+        """A third off 399 is 266.33 — the rounding must not lose the cent."""
+        plan = make_paid_plan(annual_discount_percent=33)
+        self.assertEqual(plan.annual_monthly_equivalent, Decimal('267.33'))
+        self.assertEqual(plan.price_annual_total, Decimal('3207.96'))
+
+    def test_free_and_enterprise_never_offer_annual(self):
+        free = SubscriptionPlan.objects.create(
+            name='Basic', price_monthly=0, is_free=True, annual_discount_percent=20,
+        )
+        ent = SubscriptionPlan.objects.create(
+            name='Ent', price_monthly=0, is_enterprise=True, annual_discount_percent=20,
+        )
+        self.assertFalse(free.offers_annual)
+        self.assertFalse(ent.offers_annual)
+
+
+class AnnualStripeSyncTest(TestCase):
+    def setUp(self):
+        self.plan = make_paid_plan(annual_discount_percent=20)
+
+    @patch('services.plan_pricing_service.stripe_configured', return_value=True)
+    @patch('services.plan_pricing_service._client')
+    def test_discount_creates_a_yearly_price(self, mock_client, _cfg):
+        s = MagicMock()
+        s.Product.create.return_value = MagicMock(id='prod_1')
+        s.Price.create.side_effect = [
+            MagicMock(id='price_month'), MagicMock(id='price_year'),
+        ]
+        mock_client.return_value = s
+
+        sync_plan_to_stripe(self.plan)
+
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.stripe_price_id, 'price_month')
+        self.assertEqual(self.plan.stripe_price_id_annual, 'price_year')
+
+        monthly, annual = s.Price.create.call_args_list
+        self.assertEqual(monthly.kwargs['unit_amount'], 39900)
+        self.assertEqual(monthly.kwargs['recurring'], {'interval': 'month'})
+        # 319.20 x 12 — the yearly total, not the monthly figure.
+        self.assertEqual(annual.kwargs['unit_amount'], 383040)
+        self.assertEqual(annual.kwargs['recurring'], {'interval': 'year'})
+
+    @patch('services.plan_pricing_service.stripe_configured', return_value=True)
+    @patch('services.plan_pricing_service._client')
+    def test_changing_the_discount_replaces_the_yearly_price(self, mock_client, _cfg):
+        self.plan.stripe_product_id = 'prod_1'
+        self.plan.stripe_price_id = 'price_month'
+        self.plan.stripe_price_id_annual = 'price_year_old'
+        self.plan.annual_discount_percent = 30
+        self.plan.save()
+
+        s = MagicMock()
+        s.Product.retrieve.return_value = MagicMock(id='prod_1')
+        s.Price.retrieve.side_effect = [
+            _price(39900, 'prod_1', 'month'),          # monthly unchanged
+            _price(383040, 'prod_1', 'year'),          # yearly still at 20% off
+        ]
+        s.Price.create.return_value = MagicMock(id='price_year_new')
+        mock_client.return_value = s
+
+        sync_plan_to_stripe(self.plan)
+
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.stripe_price_id, 'price_month')
+        self.assertEqual(self.plan.stripe_price_id_annual, 'price_year_new')
+        # 399 x 0.70 x 12
+        self.assertEqual(s.Price.create.call_args.kwargs['unit_amount'], 335160)
+        s.Price.modify.assert_called_once_with('price_year_old', active=False)
+
+    @patch('services.plan_pricing_service.stripe_configured', return_value=True)
+    @patch('services.plan_pricing_service._client')
+    def test_removing_the_discount_withdraws_the_yearly_price(self, mock_client, _cfg):
+        """Otherwise the yearly price stays purchasable after the offer ends."""
+        self.plan.stripe_product_id = 'prod_1'
+        self.plan.stripe_price_id = 'price_month'
+        self.plan.stripe_price_id_annual = 'price_year'
+        self.plan.annual_discount_percent = 0
+        self.plan.save()
+
+        s = MagicMock()
+        s.Product.retrieve.return_value = MagicMock(id='prod_1')
+        s.Price.retrieve.return_value = _price(39900, 'prod_1', 'month')
+        mock_client.return_value = s
+
+        sync_plan_to_stripe(self.plan)
+
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.stripe_price_id_annual, '')
+        s.Price.modify.assert_called_once_with('price_year', active=False)
+
+    @patch('services.plan_pricing_service.stripe_configured', return_value=True)
+    @patch('services.plan_pricing_service._client')
+    def test_a_monthly_price_is_not_accepted_for_the_yearly_slot(self, mock_client, _cfg):
+        """Interval is part of the match, or a monthly price bills 12x too little."""
+        self.plan.stripe_product_id = 'prod_1'
+        self.plan.stripe_price_id = 'price_month'
+        self.plan.stripe_price_id_annual = 'price_wrong'
+        self.plan.save()
+
+        s = MagicMock()
+        s.Product.retrieve.return_value = MagicMock(id='prod_1')
+        s.Price.retrieve.side_effect = [
+            _price(39900, 'prod_1', 'month'),
+            _price(383040, 'prod_1', 'month'),   # right amount, wrong interval
+        ]
+        s.Price.create.return_value = MagicMock(id='price_year')
+        mock_client.return_value = s
+
+        sync_plan_to_stripe(self.plan)
+
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.stripe_price_id_annual, 'price_year')
+
+
+class AnnualCheckoutTest(TestCase):
+    """Which price gets billed must be decided from the plan, not the request."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            email='emp@test.com', password='StrongPass1', first_name='Em',
+            last_name='Ployer', user_type='employer',
+        )
+        EmployerProfile.objects.get_or_create(user=self.user, defaults={'company_name': 'Co'})
+        self.client.force_authenticate(self.user)
+        self.plan = make_paid_plan(
+            annual_discount_percent=20,
+            stripe_price_id='price_month',
+            stripe_price_id_annual='price_year',
+        )
+
+    @patch('subscriptions.views._stripe')
+    def test_annual_request_bills_the_yearly_price(self, mock_stripe):
+        s = MagicMock()
+        s.checkout.Session.create.return_value = MagicMock(url='https://stripe.test/s')
+        mock_stripe.return_value = s
+
+        r = self.client.post(
+            '/api/v1/subscriptions/create-checkout/',
+            {'plan_id': self.plan.id, 'billing': 'annual'}, format='json',
+        )
+
+        self.assertEqual(r.status_code, 200)
+        line_items = s.checkout.Session.create.call_args.kwargs['line_items']
+        self.assertEqual(line_items[0]['price'], 'price_year')
+
+    @patch('subscriptions.views._stripe')
+    def test_default_is_monthly(self, mock_stripe):
+        s = MagicMock()
+        s.checkout.Session.create.return_value = MagicMock(url='https://stripe.test/s')
+        mock_stripe.return_value = s
+
+        self.client.post(
+            '/api/v1/subscriptions/create-checkout/',
+            {'plan_id': self.plan.id}, format='json',
+        )
+
+        line_items = s.checkout.Session.create.call_args.kwargs['line_items']
+        self.assertEqual(line_items[0]['price'], 'price_month')
+
+    def test_annual_is_refused_when_the_plan_does_not_offer_it(self):
+        self.plan.annual_discount_percent = 0
+        self.plan.save()
+
+        r = self.client.post(
+            '/api/v1/subscriptions/create-checkout/',
+            {'plan_id': self.plan.id, 'billing': 'annual'}, format='json',
+        )
+
+        self.assertEqual(r.status_code, 400)
+
+    def test_an_unknown_billing_value_is_rejected(self):
+        r = self.client.post(
+            '/api/v1/subscriptions/create-checkout/',
+            {'plan_id': self.plan.id, 'billing': 'weekly'}, format='json',
+        )
+
+        self.assertEqual(r.status_code, 400)
+
+
 class PlanSyncEndpointTest(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -364,6 +602,21 @@ class PublicPricingReflectsAdminEditsTest(TestCase):
         plan = [p for p in res.json()['data'] if p['id'] == self.plan.pk][0]
         self.assertEqual(Decimal(plan['price_monthly']), Decimal('450'))
         self.assertEqual(plan['features'], ['New feature'])
+
+    def test_public_plan_list_carries_the_admins_discount(self):
+        """The page must not compute the discount itself — this is the path
+        that let the advertised 20% drift from what Stripe actually billed."""
+        self.admin.put(
+            f'/api/v1/admin/plans/{self.plan.pk}/',
+            {'annual_discount_percent': 15}, format='json',
+        )
+        res = self.client.get('/api/v1/subscriptions/plans/employer/')
+        plan = [p for p in res.json()['data'] if p['id'] == self.plan.pk][0]
+
+        self.assertTrue(plan['offers_annual'])
+        self.assertEqual(plan['annual_discount_percent'], 15)
+        self.assertEqual(Decimal(plan['annual_monthly_equivalent']), Decimal('339.15'))
+        self.assertEqual(Decimal(plan['price_annual_total']), Decimal('4069.80'))
 
     def test_job_post_limit_change_takes_effect_immediately(self):
         from services.subscription_service import check_job_posting_limit

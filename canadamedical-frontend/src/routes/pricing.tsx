@@ -23,6 +23,8 @@ interface ApiPlan {
   id: number; name: string; price_monthly: string;
   is_free: boolean; is_enterprise: boolean; is_popular: boolean;
   job_post_limit: number | null; features: string[]; stripe_price_id: string | null;
+  annual_discount_percent: number; offers_annual: boolean;
+  annual_monthly_equivalent: string; price_annual_total: string;
 }
 
 interface EnterpriseForm {
@@ -207,13 +209,27 @@ function PricingPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Annual billing exists only where an admin has set a discount, so the
+  // toggle is hidden entirely when no plan offers one.
+  const annualPlans = (plans ?? []).filter((p) => p.offers_annual);
+  const annualAvailable = annualPlans.length > 0;
+  const maxDiscount = annualAvailable
+    ? Math.max(...annualPlans.map((p) => p.annual_discount_percent))
+    : 0;
+  const showAnnual = billing === "annual" && annualAvailable;
+
   async function handlePlanClick(plan: ApiPlan) {
     if (plan.is_enterprise) { setShowEnterpriseModal(true); return; }
     if (!isAuthenticated || userType !== "employer") { setAuthPromptPlan(plan); return; }
     if (plan.is_free) { navigate({ to: "/dashboard/employer" } as never); return; }
     setLoadingPlanId(plan.id);
     try {
-      const r = await api.post("/api/subscriptions/create-checkout/", { plan_id: plan.id });
+      const r = await api.post("/api/subscriptions/create-checkout/", {
+        plan_id: plan.id,
+        // Only ask for annual where this plan actually has one, otherwise the
+        // request is rejected rather than quietly falling back to monthly.
+        billing: showAnnual && plan.offers_annual ? "annual" : "monthly",
+      });
       const url = r.data?.data?.checkout_url ?? r.data?.checkout_url;
       if (url) window.location.href = url;
       else toast.error("Could not start checkout. Please try again.");
@@ -224,13 +240,23 @@ function PricingPage() {
     }
   }
 
-  // Effective price with annual discount
+  const money = (v: string | number) => {
+    const n = Number(v);
+    // Whole dollars stay clean; a discount that lands on cents still shows them.
+    return Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`;
+  };
+
+  /** The figure shown large, plus the struck-through original when discounted. */
   function displayPrice(plan: ApiPlan) {
-    if (plan.is_free) return "$0";
-    if (plan.is_enterprise) return "Custom";
-    const monthly = Number(plan.price_monthly);
-    const price = billing === "annual" ? Math.round(monthly * 0.8) : monthly;
-    return `$${price}`;
+    if (plan.is_free) return { price: "$0", was: null };
+    if (plan.is_enterprise) return { price: "Custom", was: null };
+    if (showAnnual && plan.offers_annual) {
+      return {
+        price: money(plan.annual_monthly_equivalent),
+        was: money(plan.price_monthly),
+      };
+    }
+    return { price: money(plan.price_monthly), was: null };
   }
 
   return (
@@ -258,29 +284,31 @@ function PricingPage() {
           All plans include access to our verified physician network.
         </p>
 
-        {/* Billing toggle */}
-        <div className="mt-8 inline-flex items-center rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
-          <button
-            onClick={() => setBilling("monthly")}
-            className={`rounded-xl px-6 py-2.5 text-sm font-semibold transition ${
-              billing === "monthly"
-                ? "bg-white text-[#0f1f3d] shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            Monthly
-          </button>
-          <button
-            onClick={() => setBilling("annual")}
-            className={`rounded-xl px-6 py-2.5 text-sm font-bold transition ${
-              billing === "annual"
-                ? "bg-[#1a6fd4] text-white shadow-sm"
-                : "text-slate-500 hover:text-slate-700"
-            }`}
-          >
-            Annual (Save 20%)
-          </button>
-        </div>
+        {/* Billing toggle — only meaningful when a plan is sold yearly */}
+        {annualAvailable && (
+          <div className="mt-8 inline-flex items-center rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+            <button
+              onClick={() => setBilling("monthly")}
+              className={`rounded-xl px-6 py-2.5 text-sm font-semibold transition ${
+                billing === "monthly"
+                  ? "bg-white text-[#0f1f3d] shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setBilling("annual")}
+              className={`rounded-xl px-6 py-2.5 text-sm font-bold transition ${
+                billing === "annual"
+                  ? "bg-[#1a6fd4] text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              Annual (Save {maxDiscount}%)
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Plan Cards ─────────────────────────────────────────────────────── */}
@@ -296,7 +324,7 @@ function PricingPage() {
             {(plans ?? []).map((plan) => {
               const isPopular = plan.is_popular;
               const isProcessing = loadingPlanId === plan.id;
-              const price = displayPrice(plan);
+              const { price, was } = displayPrice(plan);
               const perLabel = plan.is_free ? "" : plan.is_enterprise ? "" : "/month";
               const planNameUpper = plan.name.toUpperCase();
 
@@ -318,11 +346,20 @@ function PricingPage() {
                     {/* Plan name */}
                     <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#1a6fd4]">{planNameUpper}</p>
 
-                    {/* Price */}
-                    <div className="mt-3 flex items-baseline gap-1">
+                    {/* Price — original struck through when a discount applies */}
+                    <div className="mt-3 flex items-baseline gap-2">
                       <span className="text-5xl font-extrabold tracking-tight text-[#0f1f3d]">{price}</span>
+                      {was && (
+                        <span className="text-lg font-semibold text-slate-400 line-through">{was}</span>
+                      )}
                       {perLabel && <span className="text-sm text-slate-400">{perLabel}</span>}
                     </div>
+                    {was && (
+                      <p className="mt-1.5 text-sm font-medium text-emerald-600">
+                        Save {plan.annual_discount_percent}% — billed{" "}
+                        {money(plan.price_annual_total)} yearly
+                      </p>
+                    )}
 
                     {/* Subtitle */}
                     <p className="mt-3 text-sm text-slate-500">

@@ -56,7 +56,27 @@ class CreateCheckoutSessionView(APIView):
         except SubscriptionPlan.DoesNotExist:
             return success_response(message='Plan not found.', status_code=status.HTTP_404_NOT_FOUND)
 
-        if not plan.stripe_price_id:
+        # Which price to bill is decided here from the plan, never taken from
+        # the request body — a client that could name its own price id would
+        # be choosing what it pays.
+        billing = request.data.get('billing', 'monthly')
+        if billing not in ('monthly', 'annual'):
+            return success_response(
+                message='billing must be "monthly" or "annual".',
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if billing == 'annual':
+            price_id = plan.stripe_price_id_annual
+            if not plan.offers_annual or not price_id:
+                return success_response(
+                    message='This plan is not available on annual billing.',
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            price_id = plan.stripe_price_id
+
+        if not price_id:
             return success_response(
                 message='This plan does not support online checkout. Please contact sales.',
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -67,13 +87,14 @@ class CreateCheckoutSessionView(APIView):
             session = s.checkout.Session.create(
                 payment_method_types=['card'],
                 mode='subscription',
-                line_items=[{'price': plan.stripe_price_id, 'quantity': 1}],
+                line_items=[{'price': price_id, 'quantity': 1}],
                 success_url=f"{settings.FRONTEND_URL}/dashboard/employer?subscription=success&session_id={{CHECKOUT_SESSION_ID}}",
                 cancel_url=f"{settings.FRONTEND_URL}/employers?subscription=cancelled",
                 customer_email=request.user.email,
                 metadata={
                     'user_id': str(request.user.id),
                     'plan_id': str(plan.id),
+                    'billing': billing,
                 },
             )
         except stripe.StripeError as e:
