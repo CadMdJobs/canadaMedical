@@ -33,6 +33,26 @@ def _client():
     return stripe
 
 
+def _exists(resource, object_id):
+    """Retrieve a Stripe object, or None if this account has never seen it.
+
+    Switching STRIPE_SECRET_KEY from a test key to a live one leaves the IDs
+    saved on the plan pointing into the old account, where a plain retrieve
+    raises. Treating "unknown" as "absent" lets the caller rebuild the product
+    and price in the new account instead of failing the whole sync.
+
+    Only the not-found case is swallowed; auth failures, rate limits and
+    outages still propagate, because those must not be mistaken for a missing
+    object and silently trigger a duplicate.
+    """
+    try:
+        return resource.retrieve(object_id)
+    except stripe.InvalidRequestError as exc:
+        if getattr(exc, 'http_status', None) == 404:
+            return None
+        raise
+
+
 def to_minor_units(amount):
     """Decimal dollars -> integer cents, rounded half-up.
 
@@ -68,6 +88,15 @@ def sync_plan_to_stripe(plan, currency='usd'):
 
     try:
         product_id = plan.stripe_product_id
+        if product_id and not _exists(s.Product, product_id):
+            # Almost always means the key now points at a different Stripe
+            # account (test -> live), where our stored IDs do not exist.
+            logger.warning(
+                'Stripe product %s is unknown to this account; recreating for plan %s',
+                product_id, plan.pk,
+            )
+            product_id = ''
+
         if not product_id:
             product = s.Product.create(
                 name=f'CanadianMdJobs - {plan.name} Plan',
@@ -79,9 +108,16 @@ def sync_plan_to_stripe(plan, currency='usd'):
 
         # An existing price that already matches means there is nothing to do —
         # creating a duplicate would leave dead prices accumulating in Stripe.
+        # A price this account has never heard of falls through to Price.create
+        # below, which is what rebuilds the catalogue after a test->live switch.
         if plan.stripe_price_id:
-            existing = s.Price.retrieve(plan.stripe_price_id)
-            if existing.unit_amount == amount and existing.currency == currency:
+            existing = _exists(s.Price, plan.stripe_price_id)
+            if (
+                existing
+                and existing.unit_amount == amount
+                and existing.currency == currency
+                and existing.product == product_id
+            ):
                 if product_id != plan.stripe_product_id:
                     plan.stripe_product_id = product_id
                     plan.save(update_fields=['stripe_product_id'])

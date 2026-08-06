@@ -201,7 +201,10 @@ class StripeSyncServiceTest(TestCase):
         self.plan.save()
 
         s = MagicMock()
-        s.Price.retrieve.return_value = MagicMock(unit_amount=39900, currency='usd')
+        s.Product.retrieve.return_value = MagicMock(id='prod_1')
+        s.Price.retrieve.return_value = MagicMock(
+            unit_amount=39900, currency='usd', product='prod_1',
+        )
         mock_client.return_value = s
 
         result = sync_plan_to_stripe(self.plan)
@@ -218,7 +221,10 @@ class StripeSyncServiceTest(TestCase):
         self.plan.save()
 
         s = MagicMock()
-        s.Price.retrieve.return_value = MagicMock(unit_amount=39900, currency='usd')
+        s.Product.retrieve.return_value = MagicMock(id='prod_1')
+        s.Price.retrieve.return_value = MagicMock(
+            unit_amount=39900, currency='usd', product='prod_1',
+        )
         s.Price.create.return_value = MagicMock(id='price_new')
         mock_client.return_value = s
 
@@ -227,6 +233,84 @@ class StripeSyncServiceTest(TestCase):
         self.plan.refresh_from_db()
         self.assertEqual(self.plan.stripe_price_id, 'price_new')
         s.Price.modify.assert_called_once_with('price_old', active=False)
+
+    @patch('services.plan_pricing_service.stripe_configured', return_value=True)
+    @patch('services.plan_pricing_service._client')
+    def test_ids_from_another_account_are_rebuilt(self, mock_client, _cfg):
+        """Switching the key from test to live must rebuild, not fail.
+
+        The IDs saved on the plan belong to the sandbox account, so the live
+        account 404s on both. Without this the whole sync raises and checkout
+        keeps pointing at a price that no longer resolves.
+        """
+        import stripe as stripe_lib
+
+        self.plan.stripe_product_id = 'prod_test'
+        self.plan.stripe_price_id = 'price_test'
+        self.plan.save()
+
+        not_found = stripe_lib.InvalidRequestError('No such price', 'id', http_status=404)
+
+        s = MagicMock()
+        s.Product.retrieve.side_effect = not_found
+        s.Price.retrieve.side_effect = not_found
+        s.Product.create.return_value = MagicMock(id='prod_live')
+        s.Price.create.return_value = MagicMock(id='price_live')
+        mock_client.return_value = s
+
+        result = sync_plan_to_stripe(self.plan)
+
+        self.plan.refresh_from_db()
+        self.assertIn('synced', result)
+        self.assertEqual(self.plan.stripe_product_id, 'prod_live')
+        self.assertEqual(self.plan.stripe_price_id, 'price_live')
+
+    @patch('services.plan_pricing_service.stripe_configured', return_value=True)
+    @patch('services.plan_pricing_service._client')
+    def test_a_price_orphaned_from_its_product_is_replaced(self, mock_client, _cfg):
+        """A recreated product leaves the old price attached to the dead one."""
+        self.plan.stripe_product_id = 'prod_old'
+        self.plan.stripe_price_id = 'price_1'
+        self.plan.save()
+
+        import stripe as stripe_lib
+
+        s = MagicMock()
+        s.Product.retrieve.side_effect = stripe_lib.InvalidRequestError(
+            'No such product', 'id', http_status=404,
+        )
+        s.Product.create.return_value = MagicMock(id='prod_new')
+        # Same amount, but still hanging off the product that no longer exists.
+        s.Price.retrieve.return_value = MagicMock(
+            unit_amount=39900, currency='usd', product='prod_old',
+        )
+        s.Price.create.return_value = MagicMock(id='price_2')
+        mock_client.return_value = s
+
+        result = sync_plan_to_stripe(self.plan)
+
+        self.plan.refresh_from_db()
+        self.assertIn('synced', result)
+        self.assertEqual(self.plan.stripe_product_id, 'prod_new')
+        self.assertEqual(self.plan.stripe_price_id, 'price_2')
+
+    @patch('services.plan_pricing_service.stripe_configured', return_value=True)
+    @patch('services.plan_pricing_service._client')
+    def test_auth_failure_is_not_mistaken_for_a_missing_object(self, mock_client, _cfg):
+        """A revoked key must fail loudly, never silently duplicate a price."""
+        import stripe as stripe_lib
+
+        self.plan.stripe_product_id = 'prod_1'
+        self.plan.stripe_price_id = 'price_1'
+        self.plan.save()
+
+        s = MagicMock()
+        s.Product.retrieve.side_effect = stripe_lib.AuthenticationError('Invalid API key')
+        mock_client.return_value = s
+
+        with self.assertRaises(StripeSyncError):
+            sync_plan_to_stripe(self.plan)
+        s.Price.create.assert_not_called()
 
     @patch('services.plan_pricing_service.stripe_configured', return_value=True)
     @patch('services.plan_pricing_service._client')
