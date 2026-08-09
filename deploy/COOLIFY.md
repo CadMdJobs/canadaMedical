@@ -254,24 +254,44 @@ the matching A record. Done 2026-08-04; Traefik issued the certificate within a
 minute and the dashboard moved off plain HTTP at the same time — it is no longer
 reachable at `http://IP:8000`.
 
-### A 504 after switching compose files means Traefik, not the app
+### 504 after a deploy: never declare your own networks
 
-After the staging → coolify compose switch, `frontend` returned 504 for half an
-hour while `backend` on the same network served fine. Everything internal
-checked out: container healthy, nginx serving, correct router labels, and
-`docker exec coolify-proxy wget -O- http://<frontend-container>/healthz`
-returned `ok`.
+For several days a deploy had roughly even odds of coming up with `frontend`
+returning 504 while `backend` served fine, or occasionally both failing.
+Everything internal checked out every time: containers healthy, nginx serving,
+correct router labels, and `docker exec coolify-proxy wget -O-
+http://<container>/healthz` returning `ok`. Restarting the proxy cleared it,
+which made it look like a stale route — it was not.
 
-The cause was a stale route in Traefik — the container had been recreated with
-a new IP and the proxy was still holding the old one. The fix is one command:
+Coolify attaches **every** container in the application to a network named
+after the application (here `uiadowsniuznipz64wxyxre2`) and puts Traefik on
+that same network. It does this regardless of what the compose file says, so
+any `networks:` block you write is additive: each container ends up with a
+second address on a network the proxy is not connected to.
 
-```bash
-docker restart coolify-proxy
+```
+frontend  uiadowsniuznipz64wxyxre2        172.16.2.9   <- proxy can reach
+          uiadowsniuznipz64wxyxre2_proxy  172.16.4.3   <- proxy cannot
+
+coolify-proxy  coolify                    172.16.1.6
+               uiadowsniuznipz64wxyxre2   172.16.2.2
 ```
 
-Try this first whenever routing misbehaves after a redeploy. It reloads the
-proxy only; application containers are untouched, and the brief interruption
-covers every domain for a few seconds.
+Traefik picks one address per container with no defined order and no way to
+know which is routable. Pick the first and it works; pick the second and every
+request times out at the proxy — a 504 that looks nothing like a networking
+problem, because the container itself is perfectly healthy. Restarting the
+proxy re-rolls the dice, which is why it appeared to be a fix.
+
+The compose file therefore declares **no networks at all**, and the comment in
+place of the block explains why. Connectivity is unchanged: the Coolify network
+already joins every service. If a network block is genuinely needed one day,
+pin the route with a `traefik.docker.network` label instead of leaving Traefik
+to guess.
+
+`docker restart coolify-proxy` is still the right first move if routing
+misbehaves for some other reason. It reloads the proxy only; application
+containers are untouched and every domain drops for a few seconds.
 
 ### Firewall
 

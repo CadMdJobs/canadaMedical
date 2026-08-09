@@ -55,8 +55,6 @@ x-backend-common: &backend-common
       condition: service_healthy
     redis:
       condition: service_healthy
-  networks:
-    - backend
   logging:
     driver: "json-file"
     options:
@@ -115,8 +113,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
-    networks:
-      - backend
     logging:
       driver: "json-file"
       options:
@@ -156,8 +152,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-    networks:
-      - backend
 
   # ── Redis ────────────────────────────────────────────────────────────────────
   # Config passed as flags for the same reason as the db service above.
@@ -194,8 +188,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
-    networks:
-      - backend
     logging:
       driver: "json-file"
       options:
@@ -220,9 +212,6 @@ services:
       timeout: 10s
       retries: 5
       start_period: 90s
-    networks:
-      - backend
-      - proxy
 
   # ── Celery Worker ────────────────────────────────────────────────────────────
   celery-worker:
@@ -281,8 +270,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-    networks:
-      - proxy
     logging:
       driver: "json-file"
       options:
@@ -290,12 +277,19 @@ services:
         max-file: "3"
 
 # ─────────────────────────────────────────────────────────────────────────────
-networks:
-  backend:
-    driver: bridge
-  # Coolify attaches its Traefik proxy to this network to route the domains.
-  proxy:
-    driver: bridge
+# No `networks:` block on purpose. Coolify attaches every container in the
+# application to a network named after the application, and puts its Traefik
+# proxy on that same network — that is what routing actually runs over.
+#
+# Declaring extra networks here does not change what can reach what, since the
+# Coolify network already connects all of these services. It only gives each
+# container a second IP address. Traefik picks one of a container's addresses
+# with no defined order, and the ones on a compose-declared network are
+# unreachable from the proxy, so roughly half of all deploys came up answering
+# 504 Gateway Timeout until the proxy was restarted by hand.
+#
+# If a network block is ever needed again, pin the route explicitly with a
+# `traefik.docker.network` label rather than leaving the choice to chance.
 
 volumes:
   postgres_data:
