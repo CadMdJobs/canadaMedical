@@ -19,6 +19,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Manual trigger, from Actions → CI/CD → "Run workflow". Deploys are gated
+  # behind this workflow and Coolify's own webhook is off, so when a push
+  # fails to raise a run there is otherwise no way to release at all short of
+  # deploying by hand from the Coolify dashboard.
+  workflow_dispatch:
 
 jobs:
   test:
