@@ -5,6 +5,16 @@ from django.core.validators import MaxValueValidator
 from django.db import models
 
 
+def default_currency():
+    """The currency a payment row is stamped with when Stripe did not say.
+
+    A callable, not the literal string: a literal would be frozen into the
+    migration and keep writing whatever it was on the day the column was
+    created, even after STRIPE_CURRENCY changed.
+    """
+    return settings.STRIPE_CURRENCY
+
+
 class SubscriptionPlan(models.Model):
     PLAN_TYPE_CHOICES = [('employer', 'Employer')]
 
@@ -175,7 +185,7 @@ class PaymentHistory(models.Model):
         related_name='payments',
     )
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    currency = models.CharField(max_length=10, default='usd')
+    currency = models.CharField(max_length=10, default=default_currency)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES)
     description = models.CharField(max_length=255, blank=True)
     stripe_payment_intent_id = models.CharField(max_length=255, blank=True)

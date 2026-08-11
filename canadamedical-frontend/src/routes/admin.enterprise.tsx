@@ -54,6 +54,8 @@ interface EnterpriseRequest {
   custom_payment_status?: "pending_payment" | "paid" | "free" | "revoked" | null;
   custom_payment_link?: string | null;
   existing_plan_info?: ExistingPlanInfo | null;
+  /** System-wide Stripe currency, read-only — the price below is billed in it. */
+  currency?: string;
   created_at: string;
 }
 
@@ -389,7 +391,7 @@ function ApproveModal({ request, onClose, onDone }: { request: EnterpriseRequest
                 </div>
                 <div>
                   <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
-                    Monthly Price
+                    Monthly Price ({request.currency ?? "CAD"})
                     {hasActivePlan && ep?.estimated_unused_value && ep.estimated_unused_value > 0 && (
                       <span className="ml-1 text-amber-600">(consider discount)</span>
                     )}

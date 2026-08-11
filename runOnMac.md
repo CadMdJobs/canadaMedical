@@ -42,6 +42,7 @@ cp canadamedical-frontend/.env.example canadamedical-frontend/.env
 | `STRIPE_SECRET_KEY` | [stripe.com](https://stripe.com) → Developers → API keys → Secret key (`sk_test_...`) |
 | `STRIPE_PUBLISHABLE_KEY` | একই জায়গা → Publishable key (`pk_test_...`) |
 | `STRIPE_WEBHOOK_SECRET` | নিচের ধাপ ৫ দেখো |
+| `STRIPE_CURRENCY` | না দিলেও চলে — default `cad`। সব charge এই currency-তেই হয় |
 | `RESEND_API_KEY` | [resend.com](https://resend.com) → API Keys → Create API key (`re_...`) |
 | `RESEND_FROM_EMAIL` | `onboarding@resend.dev` রেখে দাও (test-এর জন্য) |
 

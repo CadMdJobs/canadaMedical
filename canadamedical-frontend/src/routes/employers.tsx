@@ -44,6 +44,7 @@ interface ApiPlan {
   id: number; name: string; price_monthly: string;
   is_free: boolean; is_enterprise: boolean; is_popular: boolean;
   job_post_limit: number | null; features: string[]; stripe_price_id: string | null;
+  currency: string;
 }
 
 interface EmployerTestimonial {
@@ -281,6 +282,11 @@ function PricingSection() {
             <h2 className="mt-2 text-3xl font-extrabold text-[#0f1f3d] sm:text-4xl">Simple, flexible plans</h2>
             <p className="mx-auto mt-3 max-w-xl text-sm text-slate-500">
               Start free and scale as you grow. No hidden fees, no long-term commitments.
+            </p>
+            {/* "$" alone does not say CAD. The code comes from the API so this
+                page and the checkout can never disagree about it. */}
+            <p className="mx-auto mt-1 max-w-xl text-sm font-medium text-slate-400">
+              All prices are in {plans?.[0]?.currency ?? "CAD"}.
             </p>
           </div>
 

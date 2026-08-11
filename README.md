@@ -298,6 +298,7 @@ Authorization: Bearer <access_token>
 | `STRIPE_SECRET_KEY` | Yes | From Stripe dashboard |
 | `STRIPE_PUBLISHABLE_KEY` | Yes | From Stripe dashboard |
 | `STRIPE_WEBHOOK_SECRET` | Yes | From `stripe listen` CLI output |
+| `STRIPE_CURRENCY` | No | ISO 4217 code every charge is created in. Default `cad` |
 | `RESEND_API_KEY` | Yes | From resend.com |
 | `REDIS_URL` | No | Enables Celery async tasks and WebSockets |
 | `AWS_ACCESS_KEY_ID` | No | AWS S3 for file storage in production |

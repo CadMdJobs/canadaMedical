@@ -558,7 +558,7 @@ def send_custom_plan_payment_link_email(employer_user, payment_link: str, price:
 
 <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:20px;margin-bottom:20px;">
   <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#7c3aed;text-transform:uppercase;">Your Custom Plan</p>
-  <p style="margin:0 0 12px;font-size:22px;font-weight:800;color:#111827;">${price}<span style="font-size:14px;font-weight:500;color:#6b7280;">/month</span></p>
+  <p style="margin:0 0 12px;font-size:22px;font-weight:800;color:#111827;">${price} {settings.STRIPE_CURRENCY.upper()}<span style="font-size:14px;font-weight:500;color:#6b7280;">/month</span></p>
   <ul style="margin:0;padding:0 0 0 4px;list-style:none;">
     <li style="margin:4px 0;font-size:13px;color:#374151;">✓ {limit_text}</li>
     {feature_items}

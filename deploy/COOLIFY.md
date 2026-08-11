@@ -95,6 +95,7 @@ CELERY_CONCURRENCY=2
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_PUBLISHABLE_KEY=pk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...     # fill in after step 7
+STRIPE_CURRENCY=cad                 # every charge is created in this currency
 
 # ── Resend (transactional email) ─────────────────────────────────────────────
 RESEND_API_KEY=re_...
@@ -175,6 +176,14 @@ https://api.canadianmdjobs.com/api/v1/subscriptions/webhook/
 
 Copy the new signing secret into `STRIPE_WEBHOOK_SECRET` and redeploy the
 backend.
+
+**Currency** — `STRIPE_CURRENCY` (default `cad`) is what every charge is
+created in: the plan catalogue, the annual prices and the enterprise payment
+links alike. Settle it before the first live charge. Changing it later is not
+destructive — the next deploy re-syncs the plans, building fresh prices in the
+new currency and deactivating the old ones — but anyone already subscribed
+keeps billing in the currency they signed up on until they are migrated by
+hand in the Stripe dashboard.
 
 **Resend** — verify the new sending domain and add the SPF/DKIM records it
 gives you. Until that is done every outbound email fails, including password

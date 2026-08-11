@@ -119,7 +119,7 @@ def _sync_interval(s, plan, product_id, amount, interval, field, currency):
     return True
 
 
-def sync_plan_to_stripe(plan, currency='usd'):
+def sync_plan_to_stripe(plan, currency=None):
     """Point `plan` at Stripe prices matching its current rates.
 
     Creates the product on first sync and a new recurring price whenever an
@@ -127,6 +127,12 @@ def sync_plan_to_stripe(plan, currency='usd'):
     gets a yearly price, so the discount the site advertises is the one the
     customer is actually charged. Returns a short status string suitable for
     showing back to an admin.
+
+    `currency` defaults to `settings.STRIPE_CURRENCY`, the single code every
+    charge in the system is created in; the argument exists for tests and for
+    a deliberate one-off, not for routine use. Changing that setting is
+    detected here as drift like any other, so the next sync builds a fresh
+    catalogue in the new currency and retires the old prices.
 
     Free and enterprise plans never reach Stripe: the first is not billed and
     the second is quoted per customer through CustomSubscriptionPlan.
@@ -137,6 +143,7 @@ def sync_plan_to_stripe(plan, currency='usd'):
     if not stripe_configured():
         return 'skipped: STRIPE_SECRET_KEY is not set'
 
+    currency = (currency or settings.STRIPE_CURRENCY).lower()
     s = _client()
     amount = to_minor_units(plan.price_monthly)
 

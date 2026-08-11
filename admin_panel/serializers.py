@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from drf_spectacular.utils import extend_schema_field
 from drf_spectacular.types import OpenApiTypes
@@ -265,6 +266,10 @@ class AdminSubscriptionPlanSerializer(serializers.ModelSerializer):
 
     subscriber_count = serializers.SerializerMethodField()
     stripe_in_sync = serializers.SerializerMethodField()
+    # Read-only and system-wide: the admin edits the number, not the currency,
+    # so the form can show what "399" is denominated in without implying it
+    # can be changed per plan.
+    currency = serializers.SerializerMethodField()
     # Shown next to the discount field so the admin sees the resulting figures
     # before saving, rather than working out the percentage in their head.
     annual_monthly_equivalent = serializers.DecimalField(
@@ -281,7 +286,7 @@ class AdminSubscriptionPlanSerializer(serializers.ModelSerializer):
             'is_free', 'is_enterprise', 'is_popular',
             'job_post_limit', 'features', 'order',
             'stripe_price_id', 'stripe_product_id', 'stripe_price_id_annual',
-            'subscriber_count', 'stripe_in_sync',
+            'subscriber_count', 'stripe_in_sync', 'currency',
             'annual_discount_percent', 'annual_monthly_equivalent',
             'price_annual_total',
         ]
@@ -292,6 +297,10 @@ class AdminSubscriptionPlanSerializer(serializers.ModelSerializer):
     @extend_schema_field(OpenApiTypes.INT)
     def get_subscriber_count(self, obj):
         return obj.subscriptions.filter(status='active').count()
+
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_currency(self, obj):
+        return settings.STRIPE_CURRENCY.upper()
 
     @extend_schema_field(OpenApiTypes.BOOL)
     def get_stripe_in_sync(self, obj):

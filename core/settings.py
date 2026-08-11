@@ -325,6 +325,23 @@ STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')
 STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY', default='')
 STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
 
+# The one currency every Stripe charge is created in — plan prices, annual
+# prices and enterprise payment links alike. It lives here rather than at each
+# call site because the two used to disagree: the plan catalogue was built in
+# USD while enterprise links were built in CAD, so two customers paid in two
+# currencies for the same product and the "$" on the pricing page meant
+# whichever one you happened to be quoted.
+#
+# ISO 4217, lower case, as Stripe's API expects. CAD is the default: the
+# audience, the domain and the business are Canadian.
+STRIPE_CURRENCY = config('STRIPE_CURRENCY', default='cad').strip().lower()
+if len(STRIPE_CURRENCY) != 3 or not STRIPE_CURRENCY.isalpha():
+    # Fail at boot, not at the first charge. A typo here would otherwise
+    # surface as a Stripe rejection in the middle of somebody's checkout.
+    raise ValueError(
+        f'STRIPE_CURRENCY must be a 3-letter ISO 4217 code (e.g. "cad"), got "{STRIPE_CURRENCY}".'
+    )
+
 SPECTACULAR_SETTINGS = {
     'TITLE': 'Canadian Physician Recruitment API',
     'DESCRIPTION': (

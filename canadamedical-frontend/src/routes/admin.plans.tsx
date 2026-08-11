@@ -31,6 +31,8 @@ interface Plan {
   stripe_price_id_annual: string | null;
   subscriber_count: number;
   stripe_in_sync: boolean;
+  /** System-wide, read-only. Set by STRIPE_CURRENCY, not per plan. */
+  currency: string;
   annual_discount_percent: number;
   annual_monthly_equivalent: string;
   price_annual_total: string;
@@ -129,6 +131,10 @@ function AdminPlansPage() {
   });
 
   const outOfSync = rows.filter((r) => !r.stripe_in_sync);
+  // Named in the column header rather than on every row: it is one currency
+  // for the whole catalogue, and the admin typing "399" should be able to see
+  // what they are denominating it in.
+  const currency = rows[0]?.currency ?? "CAD";
 
   const columns: Column<Plan>[] = [
     {
@@ -148,7 +154,7 @@ function AdminPlansPage() {
     },
     {
       key: "price_monthly",
-      header: "Price",
+      header: `Price (${currency})`,
       sortable: true,
       render: (r) =>
         r.is_enterprise ? (

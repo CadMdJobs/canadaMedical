@@ -1,6 +1,7 @@
 import stripe
 import logging
 from datetime import datetime, timedelta, timezone as dt_timezone
+from decimal import Decimal
 from django.conf import settings
 from django.http import HttpResponse
 from django.utils import timezone
@@ -12,6 +13,7 @@ from rest_framework.views import APIView
 
 from core.exceptions import success_response
 from core.permissions import IsEmployer, IsAdminUser
+from services.plan_pricing_service import to_minor_units
 from .models import SubscriptionPlan, UserSubscription, PaymentHistory, EnterpriseRequest, CustomSubscriptionPlan
 from emails.tasks import (
     send_payment_confirmation_email_task,
@@ -182,7 +184,7 @@ class StripeWebhookView(APIView):
             return
 
         amount_total = getattr(session, 'amount_total', None) or 0
-        currency = getattr(session, 'currency', 'cad') or 'cad'
+        currency = getattr(session, 'currency', '') or settings.STRIPE_CURRENCY
 
         # ── Custom / Enterprise payment link ──────────────────────────────
         if is_custom_plan and enterprise_request_id:
@@ -275,13 +277,13 @@ class StripeWebhookView(APIView):
         send_payment_confirmation_email_task.delay(
             user.pk,
             plan.name,
-            f"${amount_total / 100:.2f}",
+            f"${amount_total / 100:.2f} {currency.upper()}",
             period_end,
         )
         send_admin_payment_received_email_task.delay(
             user.pk,
             plan.name,
-            f"${amount_total / 100:.2f}",
+            f"${amount_total / 100:.2f} {currency.upper()}",
         )
 
     def _handle_subscription_updated(self, sub):
@@ -337,10 +339,11 @@ class StripeWebhookView(APIView):
             user_sub.save(update_fields=['current_period_end', 'status'])
 
         amount_paid = getattr(invoice, 'amount_paid', 0) or 0
+        currency = getattr(invoice, 'currency', '') or settings.STRIPE_CURRENCY
         PaymentHistory.objects.create(
             user=user_sub.user,
             amount=amount_paid / 100,
-            currency=getattr(invoice, 'currency', 'cad') or 'cad',
+            currency=currency,
             status='succeeded',
             description=f'{user_sub.plan.name} Plan — Renewal',
             stripe_payment_intent_id=getattr(invoice, 'payment_intent', '') or '',
@@ -351,13 +354,16 @@ class StripeWebhookView(APIView):
         send_payment_confirmation_email_task.delay(
             user_sub.user.pk,
             user_sub.plan.name,
-            f"${amount_paid / 100:.2f}",
+            # The receipt names the currency Stripe actually charged in, taken
+            # from the event rather than from settings — if the two ever differ
+            # the customer's copy must match their bank statement.
+            f"${amount_paid / 100:.2f} {currency.upper()}",
             next_period_end,
         )
         send_admin_payment_received_email_task.delay(
             user_sub.user.pk,
             f"{user_sub.plan.name} — Renewal",
-            f"${amount_paid / 100:.2f}",
+            f"${amount_paid / 100:.2f} {currency.upper()}",
         )
 
     def _cancel_old_subscription(self, user, new_subscription_id: str):
@@ -670,7 +676,7 @@ class SyncSubscriptionView(APIView):
                 pass
 
             amount_total = getattr(session, 'amount_total', None) or 0
-            currency = getattr(session, 'currency', 'cad') or 'cad'
+            currency = getattr(session, 'currency', '') or settings.STRIPE_CURRENCY
             PaymentHistory.objects.get_or_create(
                 stripe_payment_intent_id=getattr(session, 'payment_intent', '') or '',
                 defaults={
@@ -685,7 +691,7 @@ class SyncSubscriptionView(APIView):
             send_payment_confirmation_email_task.delay(
                 request.user.pk,
                 'Enterprise Custom Plan',
-                f"${amount_total / 100:.2f}",
+                f"${amount_total / 100:.2f} {currency.upper()}",
                 '',
             )
 
@@ -720,7 +726,8 @@ class SyncSubscriptionView(APIView):
         send_admin_payment_received_email_task.delay(
             request.user.pk,
             plan.name,
-            f"${amount_total / 100:.2f}",
+            f"${amount_total / 100:.2f} "
+            f"{(getattr(session, 'currency', '') or settings.STRIPE_CURRENCY).upper()}",
         )
         logger.info('Subscription synced via session %s for user %s', session_id, request.user.email)
         return success_response(message='Subscription synced.')
@@ -843,7 +850,7 @@ class SyncCustomPlanView(APIView):
             pass
 
         amount_total = getattr(paid_session, 'amount_total', None) or 0
-        currency = getattr(paid_session, 'currency', 'cad') or 'cad'
+        currency = getattr(paid_session, 'currency', '') or settings.STRIPE_CURRENCY
         PaymentHistory.objects.get_or_create(
             stripe_payment_intent_id=getattr(paid_session, 'payment_intent', '') or '',
             defaults={
@@ -858,7 +865,7 @@ class SyncCustomPlanView(APIView):
         send_payment_confirmation_email_task.delay(
             request.user.pk,
             'Enterprise Custom Plan',
-            f"${amount_total / 100:.2f}",
+            f"${amount_total / 100:.2f} {currency.upper()}",
             '',
         )
 
@@ -1084,8 +1091,12 @@ class AdminEnterpriseRequestApproveView(APIView):
         admin_notes = request.data.get('admin_notes', enterprise_request.admin_notes)
         valid_until = request.data.get('valid_until')
 
-        price_amount = float(custom_price_monthly or 0)
-        is_free = price_amount == 0
+        # Decimal, not float: `int(399.99 * 100)` truncates to 39998 and bills
+        # the customer a cent short. `to_minor_units` is the same conversion
+        # the plan catalogue uses, so both paths round identically.
+        price_amount = Decimal(str(custom_price_monthly or 0))
+        price_cents = to_minor_units(price_amount)
+        is_free = price_cents == 0
 
         # ── Build Stripe payment link BEFORE writing approved status to DB ──────
         # If Stripe fails we return an error without touching the DB, so the
@@ -1099,8 +1110,12 @@ class AdminEnterpriseRequestApproveView(APIView):
             s = _stripe()
             try:
                 stripe_price = s.Price.create(
-                    unit_amount=int(price_amount * 100),
-                    currency='cad',
+                    unit_amount=price_cents,
+                    # Same currency as the published plans — an enterprise
+                    # quote is the same product at a negotiated price, and
+                    # billing it in a different currency made the two
+                    # incomparable to the customer and to the books.
+                    currency=settings.STRIPE_CURRENCY,
                     recurring={'interval': 'month'},
                     product_data={
                         'name': f"CanadianMdJobs Enterprise — {enterprise_request.organization_name}",
@@ -1200,7 +1215,8 @@ class AdminEnterpriseRequestApproveView(APIView):
                 title='Your Custom Plan Payment Link is Ready',
                 message=(
                     f'Your enterprise plan has been approved! '
-                    f'Complete your payment of ${price_amount:.2f}/month to activate your custom plan '
+                    f'Complete your payment of ${price_amount:.2f} '
+                    f'{settings.STRIPE_CURRENCY.upper()}/month to activate your custom plan '
                     f'with {custom_job_limit} job postings.'
                 ),
                 link='/dashboard/employer?tab=billing',

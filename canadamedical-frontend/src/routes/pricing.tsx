@@ -25,6 +25,7 @@ interface ApiPlan {
   job_post_limit: number | null; features: string[]; stripe_price_id: string | null;
   annual_discount_percent: number; offers_annual: boolean;
   annual_monthly_equivalent: string; price_annual_total: string;
+  currency: string;
 }
 
 interface EnterpriseForm {
@@ -218,6 +219,10 @@ function PricingPage() {
     : 0;
   const showAnnual = billing === "annual" && annualAvailable;
 
+  // Server-side and identical for every plan, so the first one answers for all.
+  // "$" alone does not say CAD, and this audience reads it as USD by default.
+  const currency = plans?.[0]?.currency ?? "CAD";
+
   async function handlePlanClick(plan: ApiPlan) {
     if (plan.is_enterprise) { setShowEnterpriseModal(true); return; }
     if (!isAuthenticated || userType !== "employer") { setAuthPromptPlan(plan); return; }
@@ -282,6 +287,9 @@ function PricingPage() {
         </p>
         <p className="mt-1 text-sm text-slate-400">
           All plans include access to our verified physician network.
+        </p>
+        <p className="mt-1 text-sm font-medium text-slate-400">
+          All prices are in {currency}.
         </p>
 
         {/* Billing toggle — only meaningful when a plan is sold yearly */}

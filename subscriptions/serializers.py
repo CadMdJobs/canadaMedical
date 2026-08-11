@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
 from .models import SubscriptionPlan, UserSubscription, PaymentHistory, EnterpriseRequest, CustomSubscriptionPlan
@@ -8,6 +9,10 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
     # is the same number Stripe was told to charge. Deriving them in the
     # browser is how the advertised discount drifted from the billed amount.
     offers_annual = serializers.BooleanField(read_only=True)
+    # "$399" is ambiguous between CAD and USD, and this site quotes a currency
+    # that is not the reader's default. Sending the code lets the page label
+    # the figure instead of leaving the visitor to assume.
+    currency = serializers.SerializerMethodField()
     annual_monthly_equivalent = serializers.DecimalField(
         max_digits=10, decimal_places=2, read_only=True,
     )
@@ -22,7 +27,11 @@ class SubscriptionPlanSerializer(serializers.ModelSerializer):
             'is_popular', 'job_post_limit', 'features', 'stripe_price_id',
             'annual_discount_percent', 'offers_annual',
             'annual_monthly_equivalent', 'price_annual_total',
+            'currency',
         ]
+
+    def get_currency(self, obj) -> str:
+        return settings.STRIPE_CURRENCY.upper()
 
 
 class UserSubscriptionSerializer(serializers.ModelSerializer):
@@ -120,6 +129,10 @@ class EnterpriseRequestAdminSerializer(serializers.ModelSerializer):
     custom_payment_status = serializers.SerializerMethodField()
     custom_payment_link = serializers.SerializerMethodField()
     existing_plan_info = serializers.SerializerMethodField()
+    # The figure the admin types here becomes a real Stripe price, so the
+    # approval form should name the currency it will be charged in rather than
+    # leaving it to the dollar sign on the input.
+    currency = serializers.SerializerMethodField()
 
     class Meta:
         model = EnterpriseRequest
@@ -133,9 +146,12 @@ class EnterpriseRequestAdminSerializer(serializers.ModelSerializer):
             'admin_notes', 'approved_by_email', 'approved_at', 'rejected_reason',
             'revoked_by_email', 'revoked_at', 'revoked_reason',
             'custom_payment_status', 'custom_payment_link',
-            'existing_plan_info',
+            'existing_plan_info', 'currency',
             'created_at', 'updated_at',
         ]
+
+    def get_currency(self, obj) -> str:
+        return settings.STRIPE_CURRENCY.upper()
 
     def get_custom_payment_status(self, obj):
         try:

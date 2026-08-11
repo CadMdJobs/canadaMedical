@@ -1,8 +1,9 @@
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from accounts.models import EmployerProfile
@@ -28,10 +29,15 @@ def make_paid_plan(**kwargs):
     return SubscriptionPlan.objects.create(**defaults)
 
 
-def _price(amount, product, interval='month', currency='usd'):
-    """Stand-in for a retrieved Stripe Price."""
+def _price(amount, product, interval='month', currency=None):
+    """Stand-in for a retrieved Stripe Price.
+
+    Defaults to the configured currency so a price that is meant to look
+    unchanged actually does; hard-coding one here would make every
+    "no drift" test read as drift the moment STRIPE_CURRENCY moved.
+    """
     return MagicMock(
-        unit_amount=amount, currency=currency, product=product,
+        unit_amount=amount, currency=currency or settings.STRIPE_CURRENCY, product=product,
         recurring=MagicMock(interval=interval),
     )
 
@@ -239,6 +245,50 @@ class StripeSyncServiceTest(TestCase):
         self.assertEqual(self.plan.stripe_product_id, 'prod_1')
         self.assertEqual(self.plan.stripe_price_id, 'price_1')
         self.assertEqual(s.Price.create.call_args.kwargs['unit_amount'], 39900)
+
+    @patch('services.plan_pricing_service.stripe_configured', return_value=True)
+    @patch('services.plan_pricing_service._client')
+    def test_price_is_created_in_the_configured_currency(self, mock_client, _cfg):
+        """The catalogue follows STRIPE_CURRENCY, not a literal in the service.
+
+        Plan prices were built in USD while enterprise payment links were
+        built in CAD, so the same product was sold in two currencies.
+        """
+        s = MagicMock()
+        s.Product.create.return_value = MagicMock(id='prod_1')
+        s.Price.create.return_value = MagicMock(id='price_1')
+        mock_client.return_value = s
+
+        with override_settings(STRIPE_CURRENCY='cad'):
+            sync_plan_to_stripe(self.plan)
+
+        self.assertEqual(s.Price.create.call_args.kwargs['currency'], 'cad')
+
+    @patch('services.plan_pricing_service.stripe_configured', return_value=True)
+    @patch('services.plan_pricing_service._client')
+    def test_changing_the_currency_rebuilds_the_price(self, mock_client, _cfg):
+        """A currency switch is drift like any other: new price, old retired.
+
+        Without this the plan would keep pointing at a price denominated in
+        the currency the site no longer advertises.
+        """
+        self.plan.stripe_product_id = 'prod_1'
+        self.plan.stripe_price_id = 'price_cad'
+        self.plan.save()
+
+        s = MagicMock()
+        s.Product.retrieve.return_value = MagicMock(id='prod_1')
+        s.Price.retrieve.return_value = _price(39900, 'prod_1', currency='cad')
+        s.Price.create.return_value = MagicMock(id='price_usd')
+        mock_client.return_value = s
+
+        with override_settings(STRIPE_CURRENCY='usd'):
+            sync_plan_to_stripe(self.plan)
+
+        self.plan.refresh_from_db()
+        self.assertEqual(self.plan.stripe_price_id, 'price_usd')
+        self.assertEqual(s.Price.create.call_args.kwargs['currency'], 'usd')
+        s.Price.modify.assert_called_once_with('price_cad', active=False)
 
     @patch('services.plan_pricing_service.stripe_configured', return_value=True)
     @patch('services.plan_pricing_service._client')
