@@ -42,6 +42,11 @@ class Job(models.Model):
     is_featured = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     is_approved = models.BooleanField(default=False)
+    # Set when an employer removes a listing that people have applied to. The
+    # row stays so the applications keep their parent; it simply stops being a
+    # job anyone can see. A listing with no applications is still deleted
+    # outright — archiving those would only clutter the employer's own list.
+    archived_at = models.DateTimeField(null=True, blank=True)
     approved_at = models.DateTimeField(null=True, blank=True)
     rejection_reason = models.TextField(blank=True, null=True)
     rejected_at = models.DateTimeField(null=True, blank=True)
@@ -73,8 +78,20 @@ class Job(models.Model):
 class JobApplication(models.Model):
     STATUS_CHOICES = APPLICATION_STATUS_CHOICES
 
-    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name='applications')
+    # SET_NULL, not CASCADE: an application is the record of something a
+    # physician did, and deleting the employer's listing must not erase it.
+    # The API archives instead of deleting whenever applications exist, so
+    # this only fires for admin or database-level deletion — the cases where
+    # silent loss would be worst.
+    job = models.ForeignKey(Job, on_delete=models.SET_NULL, null=True, related_name='applications')
     physician = models.ForeignKey(PhysicianProfile, on_delete=models.CASCADE, related_name='applications')
+    # Copied from the job at apply time so the physician's history stays
+    # readable even if the listing is later edited or removed. This is also
+    # the more honest record: it shows what they actually applied to, not
+    # what the posting was rewritten into afterwards.
+    job_title_snapshot = models.CharField(max_length=255, blank=True)
+    job_location_snapshot = models.CharField(max_length=255, blank=True)
+    employer_name_snapshot = models.CharField(max_length=255, blank=True)
     cover_letter = models.TextField(blank=True)
     resume = models.FileField(upload_to=application_resume_path, blank=True, null=True,
                               help_text='CV/resume submitted with this application')

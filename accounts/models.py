@@ -116,6 +116,11 @@ class EmployerProfile(models.Model):
     contact_person_last_name = models.CharField(max_length=150, blank=True)
     website = models.URLField(blank=True)
     logo = models.ImageField(upload_to='employer_logos/', blank=True, null=True)
+    # Every job this employer has ever created. Only ever goes up — deleting a
+    # listing does not give the post back. The free plan is sold as a fixed
+    # number of posts rather than a number of live listings, and counting rows
+    # in the jobs table would let an employer delete and repost forever.
+    jobs_posted_count = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

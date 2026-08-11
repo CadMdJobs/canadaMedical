@@ -16,7 +16,9 @@ PLANS = [
         'job_post_limit': 1,
         'order': 1,
         'features': [
-            '1 Job Posting (30 days)',
+            # Worded as a total, not a slot: the free tier is metered by posts
+            # ever made, so deleting the job does not hand it back.
+            '1 Job Posting (one-time)',
             'Standard listing placement',
             'Application management',
             'Email notifications',

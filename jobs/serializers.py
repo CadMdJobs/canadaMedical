@@ -89,8 +89,11 @@ class JobCreateUpdateSerializer(serializers.ModelSerializer):
             'job_type', 'practice_setting', 'required_experience',
             'salary_min', 'salary_max', 'salary_display', 'compensation_model',
             'remote_option', 'relocation_assistance',
-            'is_active',
         ]
+        # `is_active` is deliberately absent. Opening and closing a listing
+        # goes through the close/reopen endpoints, which enforce the plan's
+        # job quota; accepting it here would let an employer reopen a job by
+        # editing it and walk straight past that limit.
 
     def validate_title(self, value):
         if len(value.strip()) < 5:
@@ -114,10 +117,14 @@ class JobCreateUpdateSerializer(serializers.ModelSerializer):
 
 
 class JobApplicationSerializer(serializers.ModelSerializer):
-    job_title = serializers.CharField(source='job.title', read_only=True)
-    job_location = serializers.CharField(source='job.location_display', read_only=True)
-    employer_name = serializers.CharField(source='job.employer.company_name', read_only=True)
-    job_id = serializers.IntegerField(source='job.id', read_only=True)
+    # These read through the job where it still exists and fall back to the
+    # snapshot taken at apply time where it does not. Without the fallback a
+    # removed listing would leave the physician looking at a blank row in
+    # their own application history.
+    job_title = serializers.SerializerMethodField()
+    job_location = serializers.SerializerMethodField()
+    employer_name = serializers.SerializerMethodField()
+    job_id = serializers.SerializerMethodField()
     physician_name = serializers.CharField(source='physician.user.full_name', read_only=True)
     physician_email = serializers.CharField(source='physician.user.email', read_only=True)
     physician_specialty = serializers.CharField(source='physician.specialty', read_only=True)
@@ -125,6 +132,7 @@ class JobApplicationSerializer(serializers.ModelSerializer):
     physician_cpso = serializers.CharField(source='physician.cpso_number', read_only=True)
     physician_certifications = serializers.CharField(source='physician.board_certifications', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    job_archived = serializers.SerializerMethodField()
     resume_url = serializers.SerializerMethodField()
     profile_resume_url = serializers.SerializerMethodField()
 
@@ -139,9 +147,27 @@ class JobApplicationSerializer(serializers.ModelSerializer):
             'phone', 'years_experience', 'linkedin_url',
             'availability_date', 'willing_to_relocate',
             'status', 'status_display', 'employer_notes',
-            'applied_at', 'updated_at',
+            'job_archived', 'applied_at', 'updated_at',
         ]
         read_only_fields = ['id', 'status', 'applied_at', 'updated_at']
+
+    def get_job_title(self, obj) -> str:
+        return obj.job.title if obj.job else obj.job_title_snapshot
+
+    def get_job_location(self, obj) -> str:
+        return obj.job.location_display if obj.job else obj.job_location_snapshot
+
+    def get_employer_name(self, obj) -> str:
+        return obj.job.employer.company_name if obj.job else obj.employer_name_snapshot
+
+    def get_job_id(self, obj):
+        return obj.job_id
+
+    def get_job_archived(self, obj) -> bool:
+        """True once the listing is gone — archived outright, or hard-deleted
+        back when it had no applications. The UI uses it to stop linking to a
+        page that would 404."""
+        return obj.job is None or obj.job.archived_at is not None
 
     def get_physician_specialty_display(self, obj):
         return SPECIALTY_MAP.get(obj.physician.specialty, obj.physician.specialty)
@@ -196,10 +222,16 @@ class JobApplicationCreateSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
+        job = self.context['job']
         try:
             return JobApplication.objects.create(
-                job=self.context['job'],
+                job=job,
                 physician=self.context['request'].user.physician_profile,
+                # Written once, never updated: this is what the listing said on
+                # the day the physician applied.
+                job_title_snapshot=job.title,
+                job_location_snapshot=job.location_display,
+                employer_name_snapshot=job.employer.company_name,
                 **validated_data,
             )
         except IntegrityError:

@@ -7,7 +7,7 @@ import {
   LogOut, Home, PanelLeftClose, PanelLeftOpen, Menu, X,
   ChevronDown, ChevronUp, MapPin, Building2, Calendar, Phone, Linkedin,
   AlertTriangle, XCircle, Award, Search, Printer, Loader2, ThumbsUp, ThumbsDown,
-  Pencil, Globe, Stethoscope, GraduationCap, FileCheck,
+  Pencil, Globe, Stethoscope, GraduationCap, FileCheck, Archive,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
@@ -56,6 +56,9 @@ const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: st
 interface Application {
   id: number | string;
   job_id?: number;
+  /** The listing has been taken down. The application record survives, but
+   *  there is no job page left to link to. */
+  job_archived?: boolean;
   job_title?: string;
   employer_name?: string;
   job_location?: string;
@@ -705,25 +708,36 @@ function ApplicationCard({
               Withdraw
             </button>
           )}
-          {app.job_id && (
-            <Link
-              to="/jobs/$jobId"
-              params={{ jobId: String(app.job_id) }}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground/70 transition hover:border-primary/30 hover:text-primary"
-            >
-              <ExternalLink className="h-3.5 w-3.5" /> View Job
-            </Link>
-          )}
-          {app.job_id && (
-            <button
-              onClick={handleDownloadPDF}
-              disabled={downloading}
-              title="Download job PDF"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground/70 transition hover:border-accent/40 hover:text-accent disabled:opacity-50"
-            >
-              {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
-              PDF
-            </button>
+          {/* Both of these open the job page, which no longer exists once the
+              employer takes the listing down. The application itself is still
+              here — say so rather than offering a link that 404s. */}
+          {app.job_archived ? (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground">
+              <Archive className="h-3.5 w-3.5" /> Listing removed
+            </span>
+          ) : (
+            <>
+              {app.job_id && (
+                <Link
+                  to="/jobs/$jobId"
+                  params={{ jobId: String(app.job_id) }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground/70 transition hover:border-primary/30 hover:text-primary"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" /> View Job
+                </Link>
+              )}
+              {app.job_id && (
+                <button
+                  onClick={handleDownloadPDF}
+                  disabled={downloading}
+                  title="Download job PDF"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground/70 transition hover:border-accent/40 hover:text-accent disabled:opacity-50"
+                >
+                  {downloading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Printer className="h-3.5 w-3.5" />}
+                  PDF
+                </button>
+              )}
+            </>
           )}
           <button
             onClick={onToggle}

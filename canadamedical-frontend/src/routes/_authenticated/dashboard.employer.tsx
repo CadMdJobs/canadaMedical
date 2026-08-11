@@ -10,7 +10,7 @@ import {
   CheckCircle2, AlertCircle, SlidersHorizontal, ExternalLink,
   Search, Filter, TrendingUp, BarChart2, Star, Clock,
   Award, XCircle, RefreshCw, ChevronUp,
-  CreditCard, Zap, AlertTriangle, Loader2, Printer, ArrowUpRight, Menu,
+  CreditCard, Zap, AlertTriangle, Loader2, Printer, ArrowUpRight, Menu, Archive,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
@@ -238,6 +238,9 @@ function EmployerDashboard() {
   );
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Which job the post form is editing, if any. Lives here rather than inside
+  // PostJob because the Edit button that sets it is over in MyJobs.
+  const [editingJobId, setEditingJobId] = useState<number | null>(null);
   const { user, logout, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -358,7 +361,16 @@ function EmployerDashboard() {
   }, []);
 
   function switchTab(t: Tab) {
+    // Any deliberate tab click abandons an edit in progress, so clicking
+    // "Post Job" always lands on a blank form rather than the last job edited.
+    setEditingJobId(null);
     setTab(t);
+    setDrawerOpen(false);
+  }
+
+  function startEditingJob(id: number) {
+    setEditingJobId(id);
+    setTab("post");
     setDrawerOpen(false);
   }
 
@@ -500,9 +512,17 @@ function EmployerDashboard() {
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto p-4 pb-24 lg:p-7 lg:pb-7">
-          {tab === "overview" && <Overview onNavigate={setTab} subscription={subscription ?? null} enterpriseRequest={enterpriseRequest ?? null} />}
-          {tab === "jobs" && <MyJobs onNavigate={setTab} />}
-          {tab === "post" && <PostJob onPosted={() => setTab("jobs")} subscription={subscription ?? null} onNavigate={setTab} />}
+          {tab === "overview" && <Overview onNavigate={switchTab} subscription={subscription ?? null} enterpriseRequest={enterpriseRequest ?? null} />}
+          {tab === "jobs" && <MyJobs onNavigate={switchTab} onEditJob={startEditingJob} />}
+          {tab === "post" && (
+            <PostJob
+              editingJobId={editingJobId}
+              onPosted={() => switchTab("jobs")}
+              onCancelEdit={() => switchTab("jobs")}
+              subscription={subscription ?? null}
+              onNavigate={switchTab}
+            />
+          )}
           {tab === "applications" && <Applications />}
           {tab === "profile" && <CompanyProfile />}
           {tab === "billing" && <BillingHistory subscription={subscription ?? null} />}
@@ -1207,7 +1227,7 @@ function JobExpandedDetail({ job, convRate, onNavigate }: {
 
 // ─── My Jobs (with search + filter) ──────────────────────────────────────────
 
-function MyJobs({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
+function MyJobs({ onNavigate, onEditJob }: { onNavigate: (tab: Tab) => void; onEditJob: (id: number) => void }) {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [filterSpecialty, setFilterSpecialty] = useState("");
@@ -1252,7 +1272,14 @@ function MyJobs({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 
   const del = useMutation({
     mutationFn: (id: number) => api.delete(`/api/jobs/${id}/`),
-    onSuccess: () => { toast.success("Job deleted"); setConfirmDelete(null); invalidate(); },
+    onSuccess: (res) => {
+      // The server decides between deleting and archiving, so the message it
+      // sends back is the accurate one to show.
+      toast.success(res?.data?.message ?? "Job removed");
+      setConfirmDelete(null);
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["my-subscription"] });
+    },
     onError: (e) => toast.error(apiError(e)),
   });
 
@@ -1473,6 +1500,13 @@ function MyJobs({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
                     >
                       <Eye className="h-4 w-4" />
                     </Link>
+                    <button
+                      onClick={() => onEditJob(j.id)}
+                      className="rounded-lg p-1.5 sm:p-2 text-muted-foreground transition hover:bg-secondary hover:text-primary"
+                      title="Edit job"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
                     {isLive && (
                       <button
                         onClick={() => close.mutate(j.id)}
@@ -1531,35 +1565,73 @@ function MyJobs({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         </div>
       )}
 
-      {/* ── Delete confirm modal ──────────────────────────────────────────── */}
-      {confirmDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-modal">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 mx-auto">
-              <Trash2 className="h-5 w-5 text-rose-600" />
-            </div>
-            <h3 className="mt-4 text-center text-base font-bold text-primary">Delete Job Posting?</h3>
-            <p className="mt-2 text-center text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground">"{confirmDelete.title}"</span> will be permanently deleted along with all its applications. This cannot be undone.
-            </p>
-            <div className="mt-5 flex gap-3">
-              <button
-                onClick={() => setConfirmDelete(null)}
-                className="flex-1 rounded-xl border border-border py-2.5 text-sm font-semibold text-foreground transition hover:bg-secondary"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => del.mutate(confirmDelete.id)}
-                disabled={del.isPending}
-                className="flex-1 rounded-xl bg-rose-600 py-2.5 text-sm font-bold text-white transition hover:bg-rose-700 disabled:opacity-60"
-              >
-                {del.isPending ? "Deleting…" : "Delete"}
-              </button>
+      {/* ── Delete / archive confirm modal ─────────────────────────────────
+          A listing people have applied to is archived rather than deleted, so
+          the dialog says which of the two is about to happen. Guessing wrong
+          in either direction is bad: promising deletion and archiving is a
+          lie, and warning about losing applications that are actually kept
+          scares employers out of tidying their list. */}
+      {confirmDelete && (() => {
+        const applicationCount = confirmDelete.applications_count ?? 0;
+        const willArchive = applicationCount > 0;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-modal">
+              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl mx-auto ${willArchive ? "bg-amber-50" : "bg-rose-50"}`}>
+                {willArchive
+                  ? <Archive className="h-5 w-5 text-amber-600" />
+                  : <Trash2 className="h-5 w-5 text-rose-600" />}
+              </div>
+
+              <h3 className="mt-4 text-center text-base font-bold text-primary">
+                {willArchive ? "Archive Job Posting?" : "Delete Job Posting?"}
+              </h3>
+
+              <p className="mt-2 text-center text-sm text-muted-foreground">
+                <span className="font-semibold text-foreground">"{confirmDelete.title}"</span>{" "}
+                {willArchive ? (
+                  <>
+                    will be removed from your listings. Its{" "}
+                    <span className="font-semibold text-foreground">
+                      {applicationCount} application{applicationCount === 1 ? "" : "s"}
+                    </span>{" "}
+                    will be kept, and the job slot is freed up.
+                  </>
+                ) : (
+                  <>will be permanently deleted. No one has applied to it, so nothing else is lost.</>
+                )}
+              </p>
+
+              {willArchive && (
+                <p className="mt-3 rounded-xl bg-secondary/60 px-3 py-2 text-center text-xs text-muted-foreground">
+                  Want it back on the board later? Use <span className="font-semibold">Close</span> instead —
+                  archiving cannot be undone.
+                </p>
+              )}
+
+              <div className="mt-5 flex gap-3">
+                <button
+                  onClick={() => setConfirmDelete(null)}
+                  className="flex-1 rounded-xl border border-border py-2.5 text-sm font-semibold text-foreground transition hover:bg-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => del.mutate(confirmDelete.id)}
+                  disabled={del.isPending}
+                  className={`flex-1 rounded-xl py-2.5 text-sm font-bold text-white transition disabled:opacity-60 ${
+                    willArchive ? "bg-amber-600 hover:bg-amber-700" : "bg-rose-600 hover:bg-rose-700"
+                  }`}
+                >
+                  {del.isPending
+                    ? (willArchive ? "Archiving…" : "Deleting…")
+                    : (willArchive ? "Archive" : "Delete")}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -1575,6 +1647,37 @@ const POST_SECTIONS: { id: PostJobSection; label: string; icon: React.ComponentT
   { id: "requirements", label: "Requirements", icon: CheckCircle2 },
   { id: "contact", label: "Contact", icon: Phone },
 ];
+
+/** What `GET /api/jobs/<id>/` returns, limited to what the edit form reads.
+ *  Nulls are real: the model leaves salary, deadline and the optional choice
+ *  fields nullable, and the form shows those as empty. */
+interface JobDetailResponse {
+  title?: string;
+  specialty?: string;
+  sub_specialty?: string;
+  province?: string;
+  city?: string;
+  job_type?: string;
+  practice_setting?: string | null;
+  required_experience?: string | null;
+  remote_option?: boolean;
+  relocation_assistance?: boolean;
+  description?: string;
+  responsibilities?: string;
+  qualifications?: string;
+  requirements?: string;
+  benefits?: string;
+  compensation?: string;
+  salary_min?: number | string | null;
+  salary_max?: number | string | null;
+  salary_display?: string | null;
+  compensation_model?: string | null;
+  application_deadline?: string | null;
+  contact_person?: string;
+  contact_email?: string;
+  is_approved?: boolean;
+  is_active?: boolean;
+}
 
 interface PostJobForm {
   title: string;
@@ -1611,13 +1714,62 @@ const INITIAL_FORM: PostJobForm = {
   application_deadline: "", contact_person: "", contact_email: "",
 };
 
-function PostJob({ onPosted, subscription, onNavigate }: { onPosted: () => void; subscription: UserSubscription | null; onNavigate: (tab: Tab) => void }) {
+function PostJob({ onPosted, subscription, onNavigate, editingJobId, onCancelEdit }: {
+  onPosted: () => void;
+  subscription: UserSubscription | null;
+  onNavigate: (tab: Tab) => void;
+  editingJobId: number | null;
+  onCancelEdit: () => void;
+}) {
   const qc = useQueryClient();
+  const isEditing = editingJobId !== null;
   const [section, setSection] = useState<PostJobSection>("basics");
   const [form, setForm] = useState<PostJobForm>(INITIAL_FORM);
   const [loading, setLoading] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+
+  // The list endpoint omits description, qualifications and the contact
+  // fields, so the form has to load the full job before it can be edited.
+  const { data: editingJob, isLoading: loadingJob, isError: jobLoadFailed } = useQuery<JobDetailResponse>({
+    queryKey: ["job-edit", editingJobId],
+    queryFn: async () => {
+      const r = await api.get(`/api/jobs/${editingJobId}/`);
+      return r.data?.data ?? r.data;
+    },
+    enabled: isEditing,
+    staleTime: 0,
+  });
+
+  useEffect(() => {
+    if (!editingJob) return;
+    setForm({
+      title: editingJob.title ?? "",
+      specialty: editingJob.specialty ?? "",
+      sub_specialty: editingJob.sub_specialty ?? "",
+      province: editingJob.province ?? "",
+      city: editingJob.city ?? "",
+      job_type: editingJob.job_type ?? "full_time",
+      practice_setting: editingJob.practice_setting ?? "",
+      required_experience: editingJob.required_experience ?? "",
+      remote_option: !!editingJob.remote_option,
+      relocation_assistance: !!editingJob.relocation_assistance,
+      description: editingJob.description ?? "",
+      responsibilities: editingJob.responsibilities ?? "",
+      qualifications: editingJob.qualifications ?? "",
+      requirements: editingJob.requirements ?? "",
+      benefits: editingJob.benefits ?? "",
+      compensation: editingJob.compensation ?? "",
+      salary_min: editingJob.salary_min == null ? "" : String(editingJob.salary_min),
+      salary_max: editingJob.salary_max == null ? "" : String(editingJob.salary_max),
+      salary_display: editingJob.salary_display ?? "",
+      compensation_model: editingJob.compensation_model ?? "",
+      application_deadline: editingJob.application_deadline ?? "",
+      contact_person: editingJob.contact_person ?? "",
+      contact_email: editingJob.contact_email ?? "",
+    });
+    setSection("basics");
+  }, [editingJob]);
 
   const isCustomActive = subscription?.is_custom && subscription?.custom_payment_status !== "pending_payment";
   const effectiveLimit = isCustomActive ? (subscription?.custom_job_limit ?? null) : (subscription?.job_post_limit ?? null);
@@ -1664,6 +1816,25 @@ function PostJob({ onPosted, subscription, onNavigate }: { onPosted: () => void;
     setLoading(true);
     try {
       const payload: Record<string, unknown> = { ...form };
+
+      if (isEditing) {
+        // The update is a PATCH underneath, so an omitted key keeps its old
+        // value. Emptying a field therefore has to be sent explicitly as null
+        // (or "" where the column is not nullable) or the change is silently
+        // dropped and the old salary keeps showing on the listing.
+        payload.salary_min = form.salary_min === "" ? null : Number(form.salary_min);
+        payload.salary_max = form.salary_max === "" ? null : Number(form.salary_max);
+        payload.application_deadline = form.application_deadline || null;
+
+        await api.put(`/api/jobs/${editingJobId}/`, payload);
+        toast.success("Job updated — the changes are live now.");
+        qc.invalidateQueries({ queryKey: ["my-jobs"] });
+        qc.invalidateQueries({ queryKey: ["my-jobs-all"] });
+        qc.invalidateQueries({ queryKey: ["job-edit", editingJobId] });
+        onPosted();
+        return;
+      }
+
       if (form.salary_min) payload.salary_min = Number(form.salary_min);
       else delete payload.salary_min;
       if (form.salary_max) payload.salary_max = Number(form.salary_max);
@@ -1693,7 +1864,9 @@ function PostJob({ onPosted, subscription, onNavigate }: { onPosted: () => void;
     }
   }
 
-  if (isAtLimit) {
+  // Editing never consumes a slot, so a full plan must not lock the employer
+  // out of fixing a typo in a job they already have.
+  if (isAtLimit && !isEditing) {
     return (
       <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
         <div className={`flex h-16 w-16 items-center justify-center rounded-2xl mb-5 ${isFreeUser ? "bg-accent/15" : "bg-amber-100"}`}>
@@ -1703,13 +1876,16 @@ function PostJob({ onPosted, subscription, onNavigate }: { onPosted: () => void;
         </div>
 
         <h2 className="text-2xl font-extrabold text-primary">
-          {isFreeUser ? "Job Posting Limit Reached" : `All ${effectiveLimit} Job Slots Used`}
+          {isFreeUser ? "Free Job Posts Used Up" : `All ${effectiveLimit} Job Slots Used`}
         </h2>
 
+        {/* The two plans are metered differently, so the wording has to differ
+            too. Free is a total that does not come back when a job is deleted;
+            paid is a number of live listings that frees up when one closes. */}
         <p className="mt-3 max-w-md text-sm text-muted-foreground leading-relaxed">
           {isFreeUser
-            ? `Your free plan allows 1 active job posting. Upgrade to Professional to post up to 5 jobs and reach more physicians across Canada.`
-            : `Your Professional plan includes ${effectiveLimit} active job postings and you've used all of them. To hire at a higher volume, apply for our Enterprise plan — custom job limits, dedicated support, and more.`}
+            ? `Your free plan includes ${effectiveLimit ?? 1} job post${effectiveLimit === 1 ? "" : "s"} in total, and you've used ${effectiveLimit === 1 ? "it" : "them"}. Deleting a posting doesn't give the post back. Upgrade to Professional to post up to 5 jobs at a time and reach more physicians across Canada.`
+            : `Your Professional plan includes ${effectiveLimit} active job postings and you've used all of them. Close one to free a slot, or apply for our Enterprise plan — custom job limits, dedicated support, and more.`}
         </p>
 
         <div className="mt-6 flex flex-wrap justify-center gap-3">
@@ -1762,6 +1938,31 @@ function PostJob({ onPosted, subscription, onNavigate }: { onPosted: () => void;
 
   const currentIdx = POST_SECTIONS.findIndex(s => s.id === section);
 
+  if (isEditing && loadingJob) {
+    return (
+      <div className="flex items-center justify-center gap-2 py-20 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" /> Loading job …
+      </div>
+    );
+  }
+
+  if (isEditing && jobLoadFailed) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 px-4 text-center">
+        <AlertTriangle className="h-8 w-8 text-amber-500" />
+        <p className="mt-3 text-sm font-semibold text-foreground">This job could not be loaded.</p>
+        <p className="mt-1 text-sm text-muted-foreground">It may have been deleted.</p>
+        <button
+          type="button"
+          onClick={onCancelEdit}
+          className="mt-5 rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-foreground transition hover:bg-secondary"
+        >
+          Back to My Jobs
+        </button>
+      </div>
+    );
+  }
+
   return (
     <>
       {showUpgradeModal && <UpgradeModal onClose={() => setShowUpgradeModal(false)} isPro={!isFreeUser} />}
@@ -1784,6 +1985,25 @@ function PostJob({ onPosted, subscription, onNavigate }: { onPosted: () => void;
       </nav>
 
       <form onSubmit={submit} className="rounded-2xl border border-border bg-card p-6 shadow-sm space-y-5">
+        {isEditing && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent/30 bg-accent/10 px-4 py-3">
+            <div className="flex items-center gap-2 text-sm">
+              <Pencil className="h-4 w-4 shrink-0 text-accent" />
+              <span className="font-semibold text-foreground">
+                Editing “{editingJob?.title || "this job"}”
+              </span>
+              <span className="text-muted-foreground">— changes go live immediately.</span>
+            </div>
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              className="rounded-lg px-3 py-1.5 text-sm font-semibold text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center justify-between border-b border-border pb-4">
           <div>
             <h2 className="text-lg font-bold text-primary">
@@ -1986,7 +2206,9 @@ function PostJob({ onPosted, subscription, onNavigate }: { onPosted: () => void;
               Next <ChevronRight className="h-4 w-4" />
             </button>
           ) : (
-            <SubmitButton loading={loading}>Submit for Approval</SubmitButton>
+            <SubmitButton loading={loading}>
+              {isEditing ? "Save Changes" : "Submit for Approval"}
+            </SubmitButton>
           )}
         </div>
       </form>

@@ -2,6 +2,7 @@ from django.db import transaction
 from django.db.models import Count, F, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema, extend_schema_view
 from rest_framework import status, generics
@@ -23,7 +24,7 @@ from accounts.models import EmployerProfile
 from core.constants import SPECIALTY_CHOICES, SUB_SPECIALTY_CHOICES, PROVINCE_CHOICES, PRACTICE_SETTING_CHOICES
 from core.exceptions import success_response
 from core.permissions import IsPhysician, IsEmployer
-from services.subscription_service import check_job_posting_limit
+from services.subscription_service import check_job_posting_limit, record_job_posted
 from .models import Job, JobApplication, SavedJob
 from .serializers import (
     JobListSerializer,
@@ -64,7 +65,9 @@ class JobListCreateView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        qs = Job.objects.select_related('employer').annotate(
+        # Archived listings are excluded for everyone, staff included: the row
+        # only survives to hold its applications, it is not a job any more.
+        qs = Job.objects.select_related('employer').filter(archived_at__isnull=True).annotate(
             applications_count=Count('applications', distinct=True)
         )
         if user.is_authenticated and user.is_staff:
@@ -102,6 +105,7 @@ class JobListCreateView(generics.ListCreateAPIView):
             serializer = self.get_serializer(data=request.data, context={'request': request})
             serializer.is_valid(raise_exception=True)
             job = serializer.save()
+            record_job_posted(employer)
         from emails.tasks import send_admin_new_job_email_task
         send_admin_new_job_email_task.delay(job.pk)
         return success_response(
@@ -125,30 +129,75 @@ class JobDetailView(APIView):
         return [AllowAny()]
 
     def get(self, request, pk):
-        qs = Job.objects.annotate(applications_count=Count('applications', distinct=True))
+        qs = Job.objects.select_related('employer').annotate(
+            applications_count=Count('applications', distinct=True)
+        )
         job = get_object_or_404(qs, pk=pk)
-        if not (request.user.is_authenticated and request.user.is_staff):
-            if not job.is_approved or not job.is_active:
-                return success_response(message='This job is no longer available.', status_code=status.HTTP_404_NOT_FOUND)
-        Job.objects.filter(pk=pk).update(views_count=F('views_count') + 1)
-        job.refresh_from_db(fields=['views_count'])
+
+        # The owner and staff always see the job. Everyone else only sees it
+        # once it is approved and still open. The owner needs this exemption to
+        # load the edit form for a job that is pending approval or closed —
+        # without it those two states would be uneditable.
+        privileged = request.user.is_authenticated and (
+            request.user.is_staff or job.employer.user_id == request.user.pk
+        )
+        if not privileged and (not job.is_approved or not job.is_active):
+            return success_response(message='This job is no longer available.', status_code=status.HTTP_404_NOT_FOUND)
+
+        # An employer opening their own listing — to preview it or to load the
+        # edit form — is not a candidate view, and counting it would inflate
+        # the number they use to judge the posting.
+        if not privileged:
+            Job.objects.filter(pk=pk).update(views_count=F('views_count') + 1)
+            job.refresh_from_db(fields=['views_count'])
+
         return success_response(data=JobDetailSerializer(job).data)
 
     def put(self, request, pk):
         job = get_object_or_404(Job.objects.select_related('employer__user'), pk=pk)
         if not request.user.is_staff and job.employer.user != request.user:
             return success_response(message='Permission denied.', status_code=status.HTTP_403_FORBIDDEN)
+        if job.archived_at:
+            return success_response(
+                message='This job is archived and can no longer be edited.',
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
         serializer = JobCreateUpdateSerializer(job, data=request.data, partial=True, context={'request': request})
         serializer.is_valid(raise_exception=True)
         updated = serializer.save()
         return success_response(data=JobDetailSerializer(updated).data, message='Job updated.')
 
     def delete(self, request, pk):
+        """Remove a listing — by deleting it, or by archiving it if people applied.
+
+        An application belongs to the physician who made it as much as to the
+        employer who received it, so removing a listing must not take the
+        applications, CVs and cover letters down with it. Once anyone has
+        applied the job is archived instead: it leaves every listing, frees
+        the plan slot, and keeps the records intact.
+        """
         job = get_object_or_404(Job.objects.select_related('employer__user'), pk=pk)
         if not request.user.is_staff and job.employer.user != request.user:
             return success_response(message='Permission denied.', status_code=status.HTTP_403_FORBIDDEN)
+
+        application_count = job.applications.count()
+        if application_count:
+            job.archived_at = timezone.now()
+            job.is_active = False
+            job.save(update_fields=['archived_at', 'is_active'])
+            return success_response(
+                data={'archived': True, 'applications_kept': application_count},
+                message=(
+                    f'Job archived. It has been removed from your listings, and the '
+                    f'{application_count} application(s) it received were kept.'
+                ),
+            )
+
         job.delete()
-        return success_response(message='Job deleted successfully.')
+        return success_response(
+            data={'archived': False, 'applications_kept': 0},
+            message='Job deleted successfully.',
+        )
 
 
 class JobCloseView(APIView):
@@ -165,9 +214,37 @@ class JobReopenView(APIView):
     permission_classes = [IsEmployer]
 
     def post(self, request, pk):
-        job = get_object_or_404(Job, pk=pk, employer=request.user.employer_profile)
-        job.is_active = True
-        job.save(update_fields=['is_active'])
+        """Put a closed job back on the board, if the plan still has room.
+
+        The quota counts active jobs, so closing one frees a slot. Without a
+        check here an employer at their limit could close a job, post a
+        replacement, then reopen the closed one and end up with more live
+        listings than they pay for — repeatable indefinitely.
+        """
+        employer = request.user.employer_profile
+        with transaction.atomic():
+            job = get_object_or_404(Job, pk=pk, employer=employer)
+
+            if job.archived_at:
+                return success_response(
+                    message='This job is archived and cannot be reopened.',
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # An already-open job is counted in the quota below, so reopening
+            # it at the limit would deny a request that changes nothing.
+            if job.is_active:
+                return success_response(message='This job is already open.')
+
+            allowed, error_message = check_job_posting_limit(
+                request.user, employer, for_new_post=False,
+            )
+            if not allowed:
+                return success_response(message=error_message, status_code=status.HTTP_403_FORBIDDEN)
+
+            job.is_active = True
+            job.save(update_fields=['is_active'])
+
         return success_response(message='Job reopened successfully.')
 
 
@@ -210,6 +287,9 @@ class JobDuplicateView(APIView):
                 is_approved=False,
                 views_count=0,
             )
+            # A duplicate is a new listing, so it draws down the allowance like
+            # any other. Missing this would have been a free post on every plan.
+            record_job_posted(employer)
         return success_response(
             data=JobListSerializer(copy).data,
             message='Job duplicated. It will be visible after admin approval.',
@@ -240,7 +320,8 @@ class EmployerMyJobsView(generics.ListAPIView):
         qs = Job.objects.select_related('employer').annotate(
             applications_count=Count('applications', distinct=True)
         ).filter(
-            employer=self.request.user.employer_profile
+            employer=self.request.user.employer_profile,
+            archived_at__isnull=True,
         ).order_by('-created_at')
 
         p = self.request.query_params

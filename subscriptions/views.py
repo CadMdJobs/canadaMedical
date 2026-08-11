@@ -436,11 +436,9 @@ class MySubscriptionView(APIView):
             if free_plan is None:
                 free_plan = SubscriptionPlan.objects.filter(is_free=True, plan_type='employer').first()
                 cache.set('free_employer_plan', free_plan, timeout=3600)
-            import jobs.models as jobs_models
+            from services.subscription_service import jobs_counted_against_plan
             try:
-                jobs_posted = jobs_models.Job.objects.filter(
-                    employer=request.user.employer_profile, is_active=True
-                ).count()
+                jobs_posted = jobs_counted_against_plan(request.user.employer_profile, free_plan)
             except AttributeError:
                 jobs_posted = 0
             limit = free_plan.job_post_limit if free_plan else 1

@@ -61,8 +61,8 @@ class UserSubscriptionSerializer(serializers.ModelSerializer):
 
     def get_jobs_posted(self, obj):
         try:
-            from jobs.models import Job
-            return Job.objects.filter(employer=obj.user.employer_profile, is_active=True).count()
+            from services.subscription_service import jobs_counted_against_plan
+            return jobs_counted_against_plan(obj.user.employer_profile, obj.plan)
         except Exception:
             return 0
 

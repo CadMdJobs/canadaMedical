@@ -284,7 +284,20 @@ class AdminJobDetailView(APIView):
         return success_response(data=AdminJobDetailSerializer(job).data)
 
     def delete(self, request, pk):
+        """Same rule as the employer-facing endpoint: a listing people applied
+        to is archived, not destroyed. Being an admin is not a reason to
+        delete a physician's application history along with the job."""
         job = get_object_or_404(Job, pk=pk)
+
+        application_count = job.applications.count()
+        if application_count:
+            job.archived_at = timezone.now()
+            job.is_active = False
+            job.save(update_fields=['archived_at', 'is_active'])
+            return success_response(message=(
+                f'Job archived — its {application_count} application(s) were kept.'
+            ))
+
         job.delete()
         return success_response(message='Job deleted successfully.')
 
