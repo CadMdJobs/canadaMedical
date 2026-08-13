@@ -37,6 +37,7 @@ from .serializers import (
     AdminAssessmentListSerializer,
     AdminContactDetailSerializer,
     AdminContactListSerializer,
+    AdminContactStatusSerializer,
     AdminFAQSerializer,
     AdminJobDetailSerializer,
     AdminJobListSerializer,
@@ -612,6 +613,13 @@ class AdminContactListView(APIView):
         summary='Get a contact submission detail (admin)',
         responses={200: AdminContactDetailSerializer},
     ),
+    patch=extend_schema(
+        tags=['Admin - Contacts'],
+        operation_id='admin_contact_set_status',
+        summary='Change a contact submission status (admin)',
+        request=AdminContactStatusSerializer,
+        responses={200: AdminContactDetailSerializer},
+    ),
     delete=extend_schema(
         tags=['Admin - Contacts'],
         operation_id='admin_contact_delete',
@@ -625,6 +633,16 @@ class AdminContactDetailView(APIView):
     def get(self, request, pk):
         obj = get_object_or_404(ContactSubmission, pk=pk)
         return success_response(data=AdminContactDetailSerializer(obj).data)
+
+    def patch(self, request, pk):
+        obj = get_object_or_404(ContactSubmission, pk=pk)
+        serializer = AdminContactStatusSerializer(obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return success_response(
+            data=AdminContactDetailSerializer(obj).data,
+            message='Status updated.',
+        )
 
     def delete(self, request, pk):
         obj = get_object_or_404(ContactSubmission, pk=pk)
@@ -646,8 +664,10 @@ class AdminContactRespondView(APIView):
 
     def patch(self, request, pk):
         obj = get_object_or_404(ContactSubmission, pk=pk)
-        obj.is_responded = True
-        obj.save(update_fields=['is_responded'])
+        # Set the status, not the boolean: save() derives is_responded from it,
+        # so writing the boolean directly would be undone on the next save.
+        obj.status = 'replied'
+        obj.save(update_fields=['status'])
         return success_response(
             data=AdminContactDetailSerializer(obj).data,
             message='Contact marked as responded.',
@@ -1287,9 +1307,16 @@ class AdminExportContactsView(APIView):
         response = HttpResponse(content_type='text/csv')
         response['Content-Disposition'] = 'attachment; filename="contacts.csv"'
         writer = csv.writer(response)
-        writer.writerow(['ID', 'Full Name', 'Email', 'Phone', 'Subject', 'Submitted At', 'Is Responded'])
+        # Message included: the point of exporting enquiries is usually to read
+        # or forward them, which the previous columns alone did not allow.
+        writer.writerow(
+            ['ID', 'Full Name', 'Email', 'Phone', 'Subject', 'Message', 'Submitted At', 'Status']
+        )
         for c in qs:
-            writer.writerow([c.id, c.full_name, c.email, c.phone, c.subject, c.submitted_at, c.is_responded])
+            writer.writerow([
+                c.id, c.full_name, c.email, c.phone, c.subject, c.message,
+                c.submitted_at, c.get_status_display(),
+            ])
         return response
 
 

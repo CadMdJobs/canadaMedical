@@ -77,7 +77,7 @@ class AdminContactFilter(django_filters.FilterSet):
 
     class Meta:
         model = ContactSubmission
-        fields = ['is_responded']
+        fields = ['status', 'is_responded']
 
     def filter_search(self, queryset, name, value):
         return queryset.filter(

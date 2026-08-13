@@ -219,9 +219,28 @@ class AdminAssessmentDetailSerializer(serializers.ModelSerializer):
 # ── Contact ───────────────────────────────────────────────────────────────────
 
 class AdminContactListSerializer(serializers.ModelSerializer):
+    """Includes the message body.
+
+    Enquiries are a few paragraphs at most, and carrying it here means the
+    admin can read one without a second request, and the table's search box
+    can look inside message text rather than only the subject line.
+    """
+
     class Meta:
         model = ContactSubmission
-        fields = ['id', 'full_name', 'email', 'phone', 'subject', 'submitted_at', 'is_responded']
+        fields = [
+            'id', 'full_name', 'email', 'phone', 'subject', 'message',
+            'submitted_at', 'status', 'is_responded',
+        ]
+
+
+class AdminContactStatusSerializer(serializers.ModelSerializer):
+    """Status is the only field an admin may change — the rest is what the
+    person actually submitted and editing it would falsify the record."""
+
+    class Meta:
+        model = ContactSubmission
+        fields = ['status']
 
 
 class AdminContactDetailSerializer(serializers.ModelSerializer):
