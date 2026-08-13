@@ -41,6 +41,10 @@ function ResetPasswordPage() {
         uid,
         token,
         new_password: password,
+        // The serializer re-checks the two entries match rather than trusting
+        // the browser, so it requires this field even though we compared them
+        // above. Omitting it failed every reset with "This field is required".
+        confirm_password: confirm,
       });
       setDone(true);
       setTimeout(() => navigate({ to: "/login" }), 3000);
