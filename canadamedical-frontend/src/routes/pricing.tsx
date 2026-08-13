@@ -224,8 +224,11 @@ function PricingPage() {
   const currency = plans?.[0]?.currency ?? "CAD";
 
   async function handlePlanClick(plan: ApiPlan) {
-    if (plan.is_enterprise) { setShowEnterpriseModal(true); return; }
+    // The sign-in gate comes first, enterprise included: that request is
+    // submitted against IsEmployer, so opening the form to a signed-out
+    // visitor only let them fill the whole thing and be refused on submit.
     if (!isAuthenticated || userType !== "employer") { setAuthPromptPlan(plan); return; }
+    if (plan.is_enterprise) { setShowEnterpriseModal(true); return; }
     if (plan.is_free) { navigate({ to: "/dashboard/employer" } as never); return; }
     setLoadingPlanId(plan.id);
     try {

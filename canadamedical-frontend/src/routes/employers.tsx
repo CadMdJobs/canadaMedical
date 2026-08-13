@@ -249,8 +249,11 @@ function PricingSection() {
 
   async function handlePlanClick(plan: ApiPlan) {
     if (plan.is_free) { navigate({ to: "/register/employer" } as never); return; }
-    if (plan.is_enterprise) { setShowEnterpriseModal(true); return; }
+    // Enterprise sits below the sign-in gate for the same reason a paid plan
+    // does — the request endpoint requires an employer account, so the form is
+    // only worth opening once there is one.
     if (!isAuthenticated || userType !== "employer") { navigate({ to: "/register/employer" } as never); return; }
+    if (plan.is_enterprise) { setShowEnterpriseModal(true); return; }
     setLoadingPlanId(plan.id);
     try {
       const r = await api.post("/api/subscriptions/create-checkout/", { plan_id: plan.id });
