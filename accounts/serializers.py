@@ -75,6 +75,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         data['user_type'] = actual_type
         data['full_name'] = self.user.full_name
+        # Sent alongside full_name so the client can address someone by first
+        # name and build an avatar initial without splitting a display string.
+        data['first_name'] = self.user.first_name
+        data['last_name'] = self.user.last_name
         data['email'] = self.user.email
         data['is_admin'] = is_admin
         return data

@@ -34,6 +34,10 @@ function LoginPage() {
 
       const user: AuthUser = {
         email: payload.email,
+        // first/last were dropped here, so every screen reading user.first_name
+        // saw undefined and fell back to showing the email address.
+        first_name: payload.first_name,
+        last_name: payload.last_name,
         full_name: payload.full_name,
         user_type: payload.user_type,
         is_admin: payload.is_admin,

@@ -139,6 +139,19 @@ function StatusTimeline({ status }: { status?: AppStatus }) {
   );
 }
 
+/** How to address the signed-in physician.
+ *
+ * Falls back to a plain "Doctor" rather than the email address: the previous
+ * fallback rendered "Dr. xifeb79870@careney.com", and only ever used
+ * first_name, so anyone with a surname lost it.
+ */
+function doctorLabel(user: { first_name?: string; last_name?: string; full_name?: string } | null): string {
+  const name =
+    [user?.first_name, user?.last_name].filter(Boolean).join(" ").trim() ||
+    (user?.full_name ?? "").trim();
+  return name ? `Dr. ${name}` : "Doctor";
+}
+
 function PhysicianDashboard() {
   const VALID_TABS: Tab[] = ["overview", "applications", "saved", "profile", "settings"];
   const { tab: tabParam, app: appParam } = Route.useSearch();
@@ -193,7 +206,8 @@ function PhysicianDashboard() {
     setDrawerOpen(false);
   }
 
-  const avatarInitial = (user?.first_name ?? user?.email ?? "P").slice(0, 1).toUpperCase();
+  const avatarInitial = (user?.first_name || user?.full_name || user?.email || "P")
+    .trim().slice(0, 1).toUpperCase();
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-secondary/40">
@@ -230,7 +244,7 @@ function PhysicianDashboard() {
                 : <UserIcon className="h-6 w-6" />
               }
             </div>
-            <p className="mt-2 text-sm font-bold text-primary">Dr. {user?.first_name ?? user?.email}</p>
+            <p className="mt-2 text-sm font-bold text-primary">{doctorLabel(user)}</p>
             <p className="text-xs text-muted-foreground">{displaySpecialty}</p>
           </div>
           <nav className="space-y-1">
@@ -328,7 +342,7 @@ function PhysicianDashboard() {
                   : <UserIcon className="h-7 w-7" />
                 }
               </div>
-              <p className="mt-2 text-sm font-bold text-primary">Dr. {user?.first_name ?? user?.email}</p>
+              <p className="mt-2 text-sm font-bold text-primary">{doctorLabel(user)}</p>
               <p className="text-xs text-muted-foreground">{displaySpecialty}</p>
             </div>
             <nav className="space-y-1">
@@ -421,7 +435,7 @@ function OverviewTab() {
     <>
       <header className="rounded-2xl border border-border bg-gradient-to-br from-primary to-primary-glow p-6 text-primary-foreground shadow-sm">
         <p className="text-sm uppercase tracking-wider opacity-80">Welcome back</p>
-        <h1 className="mt-1 text-2xl font-bold">Dr. {user?.first_name || user?.email}</h1>
+        <h1 className="mt-1 text-2xl font-bold">{doctorLabel(user)}</h1>
         <p className="mt-1 text-sm opacity-90">Here's what's happening with your career today.</p>
       </header>
 
