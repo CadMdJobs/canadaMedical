@@ -2,11 +2,34 @@ import logging
 import resend
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-BRAND_COLOR = "#1a6b3c"
-BRAND_NAME  = "CanadianMdJobs"
+# Palette sampled from the approved mock-up rather than guessed, so the mail
+# matches the site instead of the green it used to be.
+BRAND_COLOR  = "#1660dd"   # primary blue: buttons, the rule under the header
+BRAND_NAVY   = "#0f1f3d"   # headings
+HEADER_BG    = "#eaf0fb"   # pale blue band behind the logo
+PAGE_BG      = "#f7f8fc"   # canvas the card floats on
+CARD_BORDER  = "#e6eaf2"
+BRAND_NAME   = "CanadianMdJobs"
+
+FONT_STACK = (
+    "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,"
+    "Helvetica,Arial,sans-serif"
+)
+
+
+def _logo_url():
+    """Absolute URL to the email logo.
+
+    Mail clients cannot resolve relative paths and Outlook will not render
+    WebP, so this points at a plain PNG that Vite copies verbatim out of
+    `public/` — no content hash in the name, so the URL survives every deploy.
+    """
+    base = (getattr(settings, "FRONTEND_URL", "") or "").rstrip("/")
+    return f"{base}/email-logo.png"
 
 
 def _get_api_key():
@@ -18,6 +41,13 @@ def _from():
 
 
 def _base_html(title: str, body: str) -> str:
+    """Wrap a message body in the shared shell.
+
+    Table-based and inline-styled throughout because Outlook renders mail
+    through Word, which ignores most modern CSS. Rounded corners degrade to
+    square there, which is the only visible difference.
+    """
+    year = timezone.now().year
     return f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -26,41 +56,62 @@ def _base_html(title: str, body: str) -> str:
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>{title}</title>
 </head>
-<body style="margin:0;padding:0;background:#f4f7f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f7f6;padding:40px 0;">
-    <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+<body style="margin:0;padding:0;background:{PAGE_BG};font-family:{FONT_STACK};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+         style="background:{PAGE_BG};">
+    <tr><td align="center" style="padding:32px 12px;">
 
-        <!-- Header -->
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+             style="max-width:600px;width:100%;background:#ffffff;
+                    border:1px solid {CARD_BORDER};border-radius:14px;">
+
+        <!-- Header: logo over a pale blue band, closed by the brand rule -->
         <tr>
-          <td style="background:{BRAND_COLOR};border-radius:12px 12px 0 0;padding:28px 36px;text-align:center;">
-            <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.3px;">
-              {BRAND_NAME}
-            </h1>
-            <p style="margin:4px 0 0;color:rgba(255,255,255,0.75);font-size:13px;">
-              Canada's Physician Recruitment Platform
-            </p>
+          <td align="center"
+              style="background:{HEADER_BG};border-radius:13px 13px 0 0;
+                     padding:34px 28px 26px;border-bottom:3px solid {BRAND_COLOR};">
+            <img src="{_logo_url()}" alt="{BRAND_NAME}" width="320"
+                 style="display:block;margin:0 auto;width:320px;max-width:80%;
+                        height:auto;border:0;outline:none;text-decoration:none;" />
+            <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0"
+                   style="margin:18px auto 0;">
+              <tr>
+                <td width="46" style="border-top:1px solid #b9cdf0;font-size:0;line-height:0;">&nbsp;</td>
+                <td style="padding:0 14px;color:#15305e;font-size:14px;font-family:{FONT_STACK};">
+                  Canada's Physician Recruitment Platform
+                </td>
+                <td width="46" style="border-top:1px solid #b9cdf0;font-size:0;line-height:0;">&nbsp;</td>
+              </tr>
+            </table>
           </td>
         </tr>
 
         <!-- Body -->
         <tr>
-          <td style="background:#ffffff;padding:36px;border-radius:0 0 12px 12px;">
+          <td style="background:#ffffff;padding:34px 36px 32px;border-radius:0 0 13px 13px;">
             {body}
           </td>
         </tr>
 
-        <!-- Footer -->
+      </table>
+
+      <!-- Footer sits on the canvas, outside the card -->
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+             style="max-width:600px;width:100%;">
         <tr>
-          <td style="padding:20px 36px;text-align:center;">
-            <p style="margin:0;font-size:12px;color:#9ca3af;">
-              &copy; 2025 {BRAND_NAME}. All rights reserved.<br/>
+          <td align="center" style="padding:20px 20px 0;font-family:{FONT_STACK};">
+            <p style="margin:0;font-size:13px;color:#6b7280;">
+              &copy; {year}
+              <span style="color:{BRAND_COLOR};font-weight:700;">{BRAND_NAME}</span>.
+              All rights reserved.
+            </p>
+            <p style="margin:6px 0 0;font-size:12.5px;color:#8b93a3;">
               You're receiving this email because you have an account on our platform.
             </p>
           </td>
         </tr>
-
       </table>
+
     </td></tr>
   </table>
 </body>
@@ -104,15 +155,25 @@ def _send(to: str, subject: str, html: str) -> bool:
 # ── Button helper ──────────────────────────────────────────────────────────────
 
 def _btn(text: str, url: str, color: str = BRAND_COLOR) -> str:
+    # bgcolor on the cell as well as the style: Outlook drops the background
+    # shorthand and would otherwise render white text on white.
     return f"""
-<div style="text-align:center;margin:28px 0;">
-  <a href="{url}"
-     style="display:inline-block;background:{color};color:#ffffff;
-            text-decoration:none;font-size:14px;font-weight:600;
-            padding:13px 32px;border-radius:8px;letter-spacing:0.2px;">
-    {text}
-  </a>
-</div>
+<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0"
+       style="margin:28px auto;">
+  <tr>
+    <td align="center" bgcolor="{color}" style="background:{color};border-radius:10px;">
+      <a href="{url}"
+         style="display:inline-block;padding:15px 34px;color:#ffffff;
+                text-decoration:none;font-size:16px;font-weight:700;
+                font-family:{FONT_STACK};letter-spacing:0.1px;">
+        <span style="vertical-align:middle;">{text}</span>
+        <span style="display:inline-block;vertical-align:middle;margin-left:10px;
+                     width:22px;height:22px;line-height:21px;text-align:center;
+                     border:2px solid #ffffff;border-radius:50%;font-size:13px;">&#8594;</span>
+      </a>
+    </td>
+  </tr>
+</table>
 """
 
 
@@ -133,12 +194,12 @@ def send_welcome_email(user) -> bool:
     frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:8080")
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Welcome, {name}! 🎉</h2>
-<p style="margin:0 0 16px;color:#6b7280;font-size:14px;">Your account has been created successfully.</p>
-<p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">{role_msg}</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">Welcome, {name}! 🎉</h2>
+<p style="margin:0 0 16px;color:#5a6172;font-size:16px;line-height:1.55;">Your account has been created successfully.</p>
+<p style="margin:0 0 20px;color:#1f2937;font-size:16px;line-height:1.65;">{role_msg}</p>
 {_btn("Go to Dashboard", f"{frontend_url}/dashboard")}
 {_divider()}
-<p style="margin:0;color:#6b7280;font-size:13px;">
+<p style="margin:0;color:#374151;font-size:14px;line-height:1.6;">
   If you have any questions, reply to this email — we're here to help.
 </p>
 """
@@ -152,8 +213,8 @@ def send_application_confirmation(physician_user, job_title: str, employer_name:
     frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:8080")
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Application Submitted ✅</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">Hi {name}, your application has been received.</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">Application Submitted ✅</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">Hi {name}, your application has been received.</p>
 
 <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px;margin-bottom:20px;">
   <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#15803d;text-transform:uppercase;letter-spacing:0.5px;">Position Applied</p>
@@ -166,7 +227,7 @@ def send_application_confirmation(physician_user, job_title: str, employer_name:
 </p>
 {_btn("View My Applications", f"{frontend_url}/dashboard")}
 {_divider()}
-<p style="margin:0;color:#6b7280;font-size:13px;">Good luck with your application!</p>
+<p style="margin:0;color:#374151;font-size:14px;line-height:1.6;">Good luck with your application!</p>
 """
     return _send(
         physician_user.email,
@@ -182,8 +243,8 @@ def send_job_approved_email(employer_user, job_title: str) -> bool:
     frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:8080")
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Your Job is Live! 🚀</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">Hi {name}, great news!</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">Your Job is Live! 🚀</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">Hi {name}, great news!</p>
 
 <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px;margin-bottom:20px;">
   <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#15803d;text-transform:uppercase;letter-spacing:0.5px;">Approved Posting</p>
@@ -216,8 +277,8 @@ def send_job_rejected_email(employer_user, job_title: str, reason: str = "") -> 
 """ if reason else ""
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Job Posting Needs Revision</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">Hi {name}, your posting requires some changes before it can go live.</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">Job Posting Needs Revision</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">Hi {name}, your posting requires some changes before it can go live.</p>
 
 <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:20px;margin-bottom:16px;">
   <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#dc2626;text-transform:uppercase;letter-spacing:0.5px;">Posting</p>
@@ -245,8 +306,8 @@ def send_new_application_email(employer_user, physician_name: str, job_title: st
     frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:8080")
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">New Application Received 📩</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">Hi {name}, a physician has applied to your posting.</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">New Application Received 📩</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">Hi {name}, a physician has applied to your posting.</p>
 
 <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:20px;margin-bottom:20px;">
   <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#1d4ed8;text-transform:uppercase;">Applicant</p>
@@ -269,8 +330,8 @@ def send_password_reset_email(user, reset_url: str) -> bool:
     name = getattr(user, "first_name", None) or user.email.split("@")[0]
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Reset Your Password</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">Hi {name}, we received a request to reset your password.</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">Reset Your Password</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">Hi {name}, we received a request to reset your password.</p>
 
 <p style="margin:0 0 20px;color:#374151;font-size:14px;line-height:1.6;">
   Click the button below to set a new password. This link expires in <strong>24 hours</strong>.
@@ -296,8 +357,8 @@ def send_payment_confirmation_email(user, plan_name: str, amount: str, period_en
     renewal_line = f"<p style='margin:4px 0 0;font-size:13px;color:#6b7280;'>Next renewal: <strong>{period_end}</strong></p>" if period_end else ""
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Payment Confirmed ✅</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">Hi {name}, your subscription is now active.</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">Payment Confirmed ✅</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">Hi {name}, your subscription is now active.</p>
 
 <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px;margin-bottom:20px;">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
@@ -348,8 +409,8 @@ def send_application_status_email(physician_user, job_title: str, employer_name:
     heading, accent, bg, border, message = meta
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">{heading}</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">Hi {name},</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">{heading}</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">Hi {name},</p>
 
 <div style="background:{bg};border:1px solid {border};border-radius:10px;padding:20px;margin-bottom:20px;">
   <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:{accent};text-transform:uppercase;">Position</p>
@@ -378,8 +439,8 @@ def send_offer_accepted_email(employer_user, physician_name: str, job_title: str
     frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:8080")
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Offer Accepted! 🎉</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">Hi {name}, great news from your candidate.</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">Offer Accepted! 🎉</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">Hi {name}, great news from your candidate.</p>
 
 <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px;margin-bottom:20px;">
   <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#15803d;text-transform:uppercase;">Position Filled</p>
@@ -407,8 +468,8 @@ def send_offer_declined_email(employer_user, physician_name: str, job_title: str
     frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:8080")
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Offer Declined</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">Hi {name}, an update on your offer.</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">Offer Declined</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">Hi {name}, an update on your offer.</p>
 
 <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:20px;margin-bottom:20px;">
   <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#c2410c;text-transform:uppercase;">Position</p>
@@ -435,8 +496,8 @@ def send_offer_accepted_confirmation(physician_user, job_title: str, employer_na
     frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:8080")
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Congratulations, Dr. {name}! 🎊</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">You have officially accepted a job offer.</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">Congratulations, Dr. {name}! 🎊</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">You have officially accepted a job offer.</p>
 
 <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px;margin-bottom:20px;">
   <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#15803d;text-transform:uppercase;">Your New Position</p>
@@ -469,15 +530,15 @@ def send_employer_custom_email(physician_user, employer_name: str, job_title: st
     frontend_url = getattr(settings, "FRONTEND_URL", "http://localhost:8080")
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Message from {employer_name}</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">Hi {name}, you have a new message regarding your application.</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">Message from {employer_name}</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">Hi {name}, you have a new message regarding your application.</p>
 
 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:20px;">
   <p style="margin:0 0 4px;font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;">Regarding</p>
   <p style="margin:0;font-size:15px;font-weight:600;color:#111827;">{job_title}</p>
 </div>
 
-<div style="border-left:3px solid #1a6b3c;padding:12px 16px;margin:0 0 20px;background:#f0fdf4;border-radius:0 8px 8px 0;">
+<div style="border-left:3px solid #16a34a;padding:12px 16px;margin:0 0 20px;background:#f0fdf4;border-radius:0 8px 8px 0;">
   <p style="margin:0;font-size:14px;color:#374151;line-height:1.7;white-space:pre-wrap;">{message}</p>
 </div>
 
@@ -519,8 +580,8 @@ def send_enterprise_request_admin_email(admin_email: str, employer_name: str, or
     notes = getattr(request, 'message', '')
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">New Enterprise Plan Request</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">New Enterprise Plan Request</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">
   <strong>{employer_name}</strong> has submitted a custom plan request and is awaiting your review.
 </p>
 
@@ -528,7 +589,7 @@ def send_enterprise_request_admin_email(admin_email: str, employer_name: str, or
   <table style="width:100%;border-collapse:collapse;">{rows}</table>
 </div>
 
-{'<div style="border-left:3px solid #1a6b3c;padding:12px 16px;margin:0 0 20px;background:#f0fdf4;border-radius:0 8px 8px 0;"><p style="margin:0;font-size:13px;color:#374151;line-height:1.7;white-space:pre-wrap;">' + notes + '</p></div>' if notes else ''}
+{'<div style="border-left:3px solid #16a34a;padding:12px 16px;margin:0 0 20px;background:#f0fdf4;border-radius:0 8px 8px 0;"><p style="margin:0;font-size:13px;color:#374151;line-height:1.7;white-space:pre-wrap;">' + notes + '</p></div>' if notes else ''}
 
 {_btn('Review Request in Admin Dashboard', f'{frontend_url}/admin/enterprise')}
 {_divider()}
@@ -550,8 +611,8 @@ def send_custom_plan_payment_link_email(employer_user, payment_link: str, price:
     limit_text = f'{job_limit} active job postings' if job_limit else 'Unlimited job postings'
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Your Custom Plan is Ready! 🎉</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">Your Custom Plan is Ready! 🎉</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">
   Hi {name}, great news — your custom enterprise plan has been approved and your payment link is ready.
   Complete your payment below to activate the plan immediately.
 </p>
@@ -597,8 +658,8 @@ def send_admin_new_user_email(admin_email: str, user_email: str, user_type: str,
     role_color = '#1d4ed8' if user_type == 'physician' else '#7e22ce'
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">New User Registration 👤</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">A new account has been created on the platform.</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">New User Registration 👤</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">A new account has been created on the platform.</p>
 
 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:20px;">
   <table style="width:100%;border-collapse:collapse;">
@@ -631,8 +692,8 @@ def send_admin_new_job_email(admin_email: str, job_title: str, employer_name: st
     frontend_url = getattr(settings, 'FRONTEND_URL', '')
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">New Job Post Pending Review 📋</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">A new job posting has been submitted and requires your approval.</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">New Job Post Pending Review 📋</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">A new job posting has been submitted and requires your approval.</p>
 
 <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:20px;margin-bottom:20px;">
   <p style="margin:0 0 6px;font-size:12px;font-weight:600;color:#b45309;text-transform:uppercase;">Pending Approval</p>
@@ -655,8 +716,8 @@ def send_admin_payment_email(admin_email: str, employer_email: str, employer_nam
     frontend_url = getattr(settings, 'FRONTEND_URL', '')
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Payment Received 💳</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">A new subscription payment has been processed.</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">Payment Received 💳</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">A new subscription payment has been processed.</p>
 
 <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:20px;margin-bottom:20px;">
   <table style="width:100%;border-collapse:collapse;">
@@ -691,8 +752,8 @@ def send_admin_payment_failed_email(admin_email: str, employer_email: str, plan_
     frontend_url = getattr(settings, 'FRONTEND_URL', '')
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">⚠️ Payment Failed</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">A subscription payment has failed and the account is now past due.</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">⚠️ Payment Failed</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">A subscription payment has failed and the account is now past due.</p>
 
 <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:20px;margin-bottom:20px;">
   <table style="width:100%;border-collapse:collapse;">
@@ -724,8 +785,8 @@ def send_admin_subscription_cancelled_email(admin_email: str, employer_email: st
     frontend_url = getattr(settings, 'FRONTEND_URL', '')
 
     body = f"""
-<h2 style="margin:0 0 8px;color:#111827;font-size:20px;font-weight:700;">Subscription Cancelled</h2>
-<p style="margin:0 0 20px;color:#6b7280;font-size:14px;">An employer has cancelled their subscription.</p>
+<h2 style="margin:0 0 10px;color:#0f1f3d;font-size:28px;font-weight:800;line-height:1.22;letter-spacing:-0.4px;">Subscription Cancelled</h2>
+<p style="margin:0 0 20px;color:#5a6172;font-size:16px;line-height:1.55;">An employer has cancelled their subscription.</p>
 
 <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:20px;margin-bottom:20px;">
   <table style="width:100%;border-collapse:collapse;">
