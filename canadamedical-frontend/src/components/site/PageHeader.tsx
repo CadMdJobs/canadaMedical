@@ -1,3 +1,11 @@
+/**
+ * Simple hero for the secondary pages (contact, privacy, testimonials).
+ *
+ * Deliberately the same flat navy as the assessment and FAQ heroes rather than
+ * its own treatment: this used to layer a mesh gradient over the navy and fade
+ * the bottom 8rem into the page background, which read as a grey smudge across
+ * the lower third and matched nothing else on the site.
+ */
 export function PageHeader({
   eyebrow,
   title,
@@ -8,21 +16,24 @@ export function PageHeader({
   subtitle?: string;
 }) {
   return (
-    <section className="relative isolate overflow-hidden bg-primary text-primary-foreground">
-      <div className="absolute inset-0 bg-gradient-mesh opacity-70" />
-      <div className="absolute inset-0 bg-grid opacity-[0.06]" />
-      <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-background to-transparent" />
-      <div className="relative mx-auto max-w-7xl px-4 pt-16 pb-20 sm:pt-20 sm:pb-28 lg:px-8 lg:pt-24 lg:pb-36">
+    <section className="bg-[#0f1f3d]">
+      <div className="mx-auto max-w-3xl px-4 py-14 text-center sm:py-20 lg:px-8">
         {eyebrow && (
-          <span className="animate-fade-up inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-accent backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-glow" /> {eyebrow}
+          <span className="animate-fade-up inline-flex items-center gap-2 rounded-full bg-[#1a6fd4]/20 px-4 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[#7eb3f5]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#7eb3f5]" /> {eyebrow}
           </span>
         )}
-        <h1 className="animate-fade-up mt-5 max-w-3xl text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl lg:text-6xl" style={{ animationDelay: "60ms" }}>
+        <h1
+          className="animate-fade-up mt-4 text-4xl font-extrabold leading-tight tracking-tight text-white sm:text-5xl"
+          style={{ animationDelay: "60ms" }}
+        >
           {title}
         </h1>
         {subtitle && (
-          <p className="animate-fade-up mt-5 max-w-2xl text-lg leading-relaxed text-primary-foreground/75" style={{ animationDelay: "120ms" }}>
+          <p
+            className="animate-fade-up mx-auto mt-4 max-w-2xl text-base leading-relaxed text-slate-300"
+            style={{ animationDelay: "120ms" }}
+          >
             {subtitle}
           </p>
         )}

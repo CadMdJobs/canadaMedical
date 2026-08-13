@@ -66,13 +66,16 @@ function ContactPage() {
     <div>
       <PageHeader eyebrow="Get in touch" title="Contact CanadianMdJobs" subtitle="Whether you're a physician exploring options or an employer ready to hire — we're here." />
 
-      <section className="mx-auto max-w-7xl gap-8 px-4 pb-16 pt-8 lg:-mt-12 lg:grid lg:grid-cols-[1fr_2fr] lg:px-8 lg:pt-0">
+      {/* No negative top margin: the cards used to be pulled up into the
+          header's faded edge, which is gone now, so overlapping would put them
+          on solid navy. */}
+      <section className="mx-auto max-w-7xl gap-8 px-4 pb-16 pt-10 lg:grid lg:grid-cols-[1fr_2fr] lg:px-8 lg:pt-14">
         <aside className="space-y-3 sm:space-y-4">
           <div className="rounded-2xl border border-border bg-card p-6 shadow-(--shadow-card)">
-            <div className="flex items-start gap-3"><MapPin className="mt-0.5 h-5 w-5 text-accent" /><div><div className="font-semibold text-primary">Headquarters</div><div className="text-sm text-muted-foreground">100 King St W, Suite 4200<br/>Toronto, ON M5X 1E2</div></div></div>
+            <div className="flex items-start gap-3"><MapPin className="mt-0.5 h-5 w-5 text-accent" /><div><div className="font-semibold text-primary">Headquarters</div><div className="text-sm text-muted-foreground">106-222 Dixon Rd<br/>Toronto, ON M9P 3S5</div></div></div>
           </div>
           <div className="rounded-2xl border border-border bg-card p-6 shadow-(--shadow-card)">
-            <div className="flex items-start gap-3"><Phone className="mt-0.5 h-5 w-5 text-accent" /><div><div className="font-semibold text-primary">Phone</div><div className="text-sm text-muted-foreground">+1 (800) 555-0199<br/>Mon–Fri 8am–6pm ET</div></div></div>
+            <div className="flex items-start gap-3"><Phone className="mt-0.5 h-5 w-5 text-accent" /><div><div className="font-semibold text-primary">Phone</div><div className="text-sm text-muted-foreground">416-899-7824<br/>Mon–Fri 8am–6pm ET</div></div></div>
           </div>
           <div className="rounded-2xl border border-border bg-card p-6 shadow-(--shadow-card)">
             <div className="flex items-start gap-3"><Mail className="mt-0.5 h-5 w-5 text-accent" /><div><div className="font-semibold text-primary">Email</div><div className="text-sm text-muted-foreground">hello@CanadianMdJobs.ca</div></div></div>

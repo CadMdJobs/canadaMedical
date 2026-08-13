@@ -11,6 +11,7 @@ import {
   Search, Filter, TrendingUp, BarChart2, Star, Clock,
   Award, XCircle, RefreshCw, ChevronUp,
   CreditCard, Zap, AlertTriangle, Loader2, Printer, ArrowUpRight, Menu, Archive,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
@@ -22,6 +23,7 @@ import { useSubSpecialties } from "@/hooks/useSubSpecialties";
 import { ErrorState, StatusBadge, InlineSpinner } from "@/components/site/QueryState";
 import { Logo } from "@/components/site/Logo";
 import { NotificationBell } from "@/components/site/NotificationBell";
+import { ChangePasswordCard } from "@/components/site/ChangePasswordCard";
 
 export const Route = createFileRoute("/_authenticated/dashboard/employer")({
   head: () => ({ meta: [{ title: "Employer Dashboard — CanadianMdJobs" }] }),
@@ -34,7 +36,7 @@ export const Route = createFileRoute("/_authenticated/dashboard/employer")({
   component: EmployerDashboard,
 });
 
-type Tab = "overview" | "jobs" | "post" | "applications" | "profile" | "billing";
+type Tab = "overview" | "jobs" | "post" | "applications" | "profile" | "billing" | "settings";
 
 interface UserSubscription {
   plan_name: string;
@@ -96,6 +98,7 @@ const TABS: { id: Tab; label: string; icon: React.ComponentType<{ className?: st
   { id: "applications", label: "Applications", icon: Users },
   { id: "profile", label: "Company Profile", icon: Building2 },
   { id: "billing", label: "Billing", icon: CreditCard },
+  { id: "settings", label: "Settings", icon: SettingsIcon },
 ];
 
 const PRACTICE_SETTINGS = [
@@ -231,7 +234,7 @@ function SubSpecialtySelect({ specialty, value, onChange }: {
 }
 
 function EmployerDashboard() {
-  const VALID_TABS: Tab[] = ["overview", "jobs", "post", "applications", "profile", "billing"];
+  const VALID_TABS: Tab[] = ["overview", "jobs", "post", "applications", "profile", "billing", "settings"];
   const { subscription: subParam, session_id: sessionId, tab: tabParam, enterprise: enterpriseParam } = Route.useSearch();
   const [tab, setTab] = useState<Tab>(
     VALID_TABS.includes(tabParam as Tab) ? (tabParam as Tab) : "overview"
@@ -526,6 +529,7 @@ function EmployerDashboard() {
           {tab === "applications" && <Applications />}
           {tab === "profile" && <CompanyProfile />}
           {tab === "billing" && <BillingHistory subscription={subscription ?? null} />}
+          {tab === "settings" && <ChangePasswordCard />}
         </main>
       </div>
 
